@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Obsidian — PDF Reader</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=JetBrains+Mono:wght@300;400&family=Instrument+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:       #0a0a0b;
+    --surface:  #111113;
+    --panel:    #18181c;
+    --border:   #232329;
+    --muted:    #3a3a44;
+    --text:     #c8c8d4;
+    --text-dim: #6a6a7a;
+    --accent:   #e8d5b7;
+    --accent2:  #a89070;
+    --shadow:   0 8px 40px rgba(0,0,0,0.7);
+    --topbar-h: 52px;
+    --sidebar-w: 240px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Instrument Sans', sans-serif;
+    font-size: 14px;
+    overflow: hidden;
+  }
+
+  /* ── LAYOUT ── */
+  #app {
+    display: grid;
+    grid-template-rows: var(--topbar-h) 1fr;
+    grid-template-columns: var(--sidebar-w) 1fr;
+    height: 100vh;
+    transition: grid-template-columns 0.3s ease;
+  }
+
+  body.hide-pages #app  { grid-template-columns: 0px 1fr; }
+  body.hide-pages #sidebar { transform: translateX(-100%); opacity: 0; pointer-events: none; }
+
+  body.focus-mode #app  { grid-template-rows: 0px 1fr; grid-template-columns: 0px 1fr; }
+  body.focus-mode #topbar  { transform: translateY(-100%); opacity: 0; pointer-events: none; }
+  body.focus-mode #sidebar { transform: translateX(-100%); opacity: 0; pointer-events: none; }
+  body.focus-mode #focus-exit { opacity: 1; pointer-events: all; }
+  body.focus-mode #progress-bar { top: 0; left: 0; }
+  body.focus-mode .page-num-label { opacity: 0; }
+
+  /* ── TOPBAR ── */
+  #topbar {
+    grid-column: 1 / -1;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    gap: 12px;
+    position: relative;
+    z-index: 10;
+    transition: transform 0.3s ease, opacity 0.3s ease;
+  }
+
+  .logo {
+    font-family: 'DM Serif Display', serif;
+    font-size: 18px;
+    color: var(--accent);
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .logo span { color: var(--accent2); font-style: italic; }
+  .divider { width: 1px; height: 24px; background: var(--border); flex-shrink: 0; }
+
+  #file-btn {
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 14px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-family: 'Instrument Sans', sans-serif;
+    font-size: 13px;
+    transition: all 0.2s;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  #file-btn:hover { border-color: var(--accent2); color: var(--accent); background: rgba(168,144,112,0.06); }
+  #file-input { display: none; }
+
+  .topbar-center { flex: 1; display: flex; justify-content: center; align-items: center; min-width: 0; }
+  #doc-title {
+    font-size: 13px; color: var(--text-dim);
+    max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  .nav-controls { display: flex; align-items: center; gap: 3px; flex-shrink: 0; }
+
+  .icon-btn {
+    width: 32px; height: 32px;
+    display: flex; align-items: center; justify-content: center;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: all 0.15s;
+    flex-shrink: 0;
+  }
+  .icon-btn:hover { background: var(--panel); border-color: var(--border); color: var(--accent); }
+  .icon-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  .icon-btn:disabled:hover { background: transparent; border-color: transparent; color: var(--text-dim); }
+  .icon-btn.active { color: var(--accent); border-color: var(--accent2); background: rgba(168,144,112,0.08); }
+
+  #page-info {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px; color: var(--text-dim);
+    padding: 0 8px; white-space: nowrap;
+  }
+
+  /* ── SIDEBAR ── */
+  #sidebar {
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    overflow-y: auto; overflow-x: hidden;
+    display: flex; flex-direction: column;
+    transition: transform 0.3s ease, opacity 0.3s ease;
+  }
+  #sidebar::-webkit-scrollbar { width: 4px; }
+  #sidebar::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 4px; }
+
+  .sidebar-header {
+    padding: 14px 16px 10px;
+    font-size: 10px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--text-dim); border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; background: var(--surface); z-index: 1;
+  }
+  #thumbnail-list { padding: 12px 10px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
+
+  .thumb-item {
+    display: flex; flex-direction: column; align-items: center; gap: 5px;
+    cursor: pointer; padding: 6px 4px; border-radius: 6px; border: 1px solid transparent;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .thumb-item:hover { background: var(--panel); border-color: var(--border); }
+  .thumb-item.active { border-color: var(--accent2); background: rgba(168,144,112,0.08); }
+  .thumb-canvas { width: 100%; border-radius: 3px; box-shadow: 0 2px 8px rgba(0,0,0,0.5); display: block; }
+  .thumb-num { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text-dim); }
+  .thumb-item.active .thumb-num { color: var(--accent); }
+
+  /* ── VIEWER ── */
+  #viewer {
+    background: var(--bg);
+    overflow-y: auto; overflow-x: hidden;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 32px 24px 80px;
+    scroll-behavior: smooth;
+    position: relative;
+  }
+  #viewer::-webkit-scrollbar { width: 6px; }
+  #viewer::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 4px; }
+
+  #pages-container {
+    display: flex; flex-direction: column; align-items: center;
+    gap: 28px; width: 100%;
+  }
+
+  .page-wrapper { position: relative; box-shadow: var(--shadow); border-radius: 2px; flex-shrink: 0; }
+
+  .page-canvas {
+    display: block; border-radius: 2px;
+    filter: invert(0.88) hue-rotate(180deg) brightness(0.95) contrast(1.05);
+  }
+  .page-canvas.no-filter { filter: none; }
+
+  .page-num-label {
+    position: absolute; bottom: -22px; left: 50%; transform: translateX(-50%);
+    font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text-dim);
+    white-space: nowrap; opacity: 0.6;
+    transition: opacity 0.3s;
+  }
+
+  /* ── DROP ZONE ── */
+  #drop-zone {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 20px; width: 100%; min-height: calc(100vh - var(--topbar-h) - 80px);
+  }
+  #drop-zone.hidden { display: none; }
+  .drop-icon {
+    width: 72px; height: 72px; border-radius: 18px;
+    background: var(--panel); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center; color: var(--accent2);
+  }
+  .drop-title { font-family: 'DM Serif Display', serif; font-size: 28px; color: var(--accent); text-align: center; }
+  .drop-sub { font-size: 13px; color: var(--text-dim); text-align: center; line-height: 1.6; max-width: 300px; }
+  .drop-cta {
+    display: flex; align-items: center; gap: 8px; padding: 10px 22px;
+    background: transparent; border: 1px solid var(--accent2); border-radius: 8px;
+    color: var(--accent); cursor: pointer;
+    font-family: 'Instrument Sans', sans-serif; font-size: 14px; transition: all 0.2s;
+  }
+  .drop-cta:hover { background: rgba(168,144,112,0.1); }
+  #viewer.dragover { outline: 2px dashed var(--accent2); outline-offset: -6px; }
+
+  /* ── LOADER ── */
+  #loader { display: none; flex-direction: column; align-items: center; gap: 12px; padding: 64px; width: 100%; }
+  #loader.active { display: flex; }
+  .spinner { width: 28px; height: 28px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loader-text { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-dim); }
+
+  /* ── PROGRESS ── */
+  #progress-bar {
+    position: fixed; top: var(--topbar-h); left: var(--sidebar-w); right: 0;
+    height: 2px; background: var(--accent2);
+    transform-origin: left; transform: scaleX(0);
+    z-index: 100; opacity: 0;
+    transition: top 0.3s, left 0.3s, opacity 0.3s;
+  }
+
+  /* ── ZOOM BADGE ── */
+  #zoom-badge {
+    position: fixed; bottom: 24px; right: 24px;
+    display: flex; align-items: center; gap: 4px;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 999px; padding: 5px 4px 5px 12px;
+    z-index: 200; box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    opacity: 0; transform: translateY(6px);
+    transition: opacity 0.2s, transform 0.2s;
+  }
+  #zoom-badge.visible { opacity: 1; transform: translateY(0); }
+  #zoom-label { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-dim); min-width: 38px; text-align: center; }
+
+  /* ── FOCUS EXIT ── */
+  #focus-exit {
+    position: fixed; top: 16px; right: 16px;
+    display: flex; align-items: center; gap: 6px;
+    padding: 7px 14px;
+    background: rgba(10,10,11,0.85); backdrop-filter: blur(8px);
+    border: 1px solid var(--border); border-radius: 8px;
+    color: var(--text-dim); cursor: pointer;
+    font-family: 'Instrument Sans', sans-serif; font-size: 12px;
+    z-index: 300; opacity: 0; pointer-events: none;
+    transition: opacity 0.25s, background 0.2s, color 0.2s, border-color 0.2s;
+  }
+  #focus-exit:hover { background: var(--panel); color: var(--accent); border-color: var(--accent2); }
+
+  /* ── RESUME TOAST ── */
+  #resume-toast {
+    position: fixed; bottom: 84px; left: 50%; transform: translateX(-50%) translateY(12px);
+    display: flex; align-items: center; gap: 10px;
+    background: var(--panel); border: 1px solid var(--accent2);
+    border-radius: 10px; padding: 10px 16px;
+    font-size: 13px; color: var(--text);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+    z-index: 400; opacity: 0; pointer-events: none;
+    transition: opacity 0.25s, transform 0.25s;
+    white-space: nowrap;
+  }
+  #resume-toast.visible { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: all; }
+  #resume-toast strong { color: var(--accent); font-weight: 500; }
+  #resume-toast button {
+    padding: 4px 12px;
+    background: rgba(168,144,112,0.15); border: 1px solid var(--accent2);
+    border-radius: 6px; color: var(--accent); cursor: pointer;
+    font-family: 'Instrument Sans', sans-serif; font-size: 12px;
+    transition: background 0.15s;
+  }
+  #resume-toast button:hover { background: rgba(168,144,112,0.28); }
+  #resume-toast .toast-dismiss {
+    background: transparent; border-color: var(--border); color: var(--text-dim); margin-left: 2px;
+  }
+  #resume-toast .toast-dismiss:hover { background: rgba(255,255,255,0.05); }
+
+  /* ── ESC HINT ── */
+  #esc-hint {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text-dim);
+    background: rgba(10,10,11,0.7); border: 1px solid var(--border);
+    padding: 4px 12px; border-radius: 999px;
+    opacity: 0; pointer-events: none; z-index: 200;
+    transition: opacity 0.3s;
+  }
+  body.focus-mode #esc-hint { opacity: 0.55; }
+</style>
+</head>
+<body>
+
+<div id="app">
+
+  <!-- TOPBAR -->
+  <header id="topbar">
+    <div class="logo">Obsidian<span>.</span></div>
+    <div class="divider"></div>
+
+    <button id="file-btn" onclick="document.getElementById('file-input').click()">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/>
+      </svg>
+      Open PDF
+    </button>
+    <input type="file" id="file-input" accept=".pdf">
+
+    <div class="topbar-center">
+      <span id="doc-title">No document loaded</span>
+    </div>
+
+    <div class="nav-controls">
+
+      <!-- Dark filter -->
+      <button class="icon-btn active" id="btn-filter" title="Dark filter (D)" onclick="toggleFilter()">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="5"/>
+          <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+        </svg>
+      </button>
+
+      <div class="divider"></div>
+
+      <!-- Hide pages panel -->
+      <button class="icon-btn" id="btn-hide-pages" title="Toggle page panel (P)" onclick="togglePages()">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+          <rect x="3" y="3" width="18" height="18" rx="2"/>
+          <line x1="9" y1="3" x2="9" y2="21"/>
+        </svg>
+      </button>
+
+      <!-- Focus mode -->
+      <button class="icon-btn" id="btn-focus" title="Focus mode (F)" onclick="toggleFocus()">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+          <path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M16 21h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+        </svg>
+      </button>
+
+      <div class="divider"></div>
+
+      <!-- Page nav -->
+      <button class="icon-btn" id="btn-prev" disabled title="Previous (←)" onclick="changePage(-1)">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      <span id="page-info">— / —</span>
+      <button class="icon-btn" id="btn-next" disabled title="Next (→)" onclick="changePage(1)">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+      </button>
+
+      <div class="divider"></div>
+
+      <!-- Zoom -->
+      <button class="icon-btn" id="btn-zoom-out" disabled title="Zoom out (-)" onclick="changeZoom(-0.15)">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+      </button>
+      <button class="icon-btn" id="btn-zoom-in" disabled title="Zoom in (+)" onclick="changeZoom(0.15)">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+      </button>
+
+    </div>
+  </header>
+
+  <!-- SIDEBAR -->
+  <aside id="sidebar">
+    <div class="sidebar-header">Pages</div>
+    <div id="thumbnail-list"></div>
+  </aside>
+
+  <!-- VIEWER -->
+  <main id="viewer">
+    <div id="drop-zone">
+      <div class="drop-icon">
+        <svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+          <line x1="12" y1="18" x2="12" y2="12"/>
+          <line x1="9" y1="15" x2="15" y2="15"/>
+        </svg>
+      </div>
+      <div class="drop-title">Drop your PDF here</div>
+      <div class="drop-sub">Drag &amp; drop a PDF file, or click the button to browse.</div>
+      <button class="drop-cta" onclick="document.getElementById('file-input').click()">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="17 8 12 3 7 8"/>
+          <line x1="12" y1="3" x2="12" y2="15"/>
+        </svg>
+        Choose file
+      </button>
+    </div>
+    <div id="loader">
+      <div class="spinner"></div>
+      <span class="loader-text">Rendering pages…</span>
+    </div>
+    <div id="pages-container"></div>
+  </main>
+</div>
+
+<!-- PROGRESS BAR -->
+<div id="progress-bar"></div>
+
+<!-- FOCUS EXIT -->
+<button id="focus-exit" onclick="toggleFocus()">
+  <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+    <path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M16 21h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+  </svg>
+  Exit Focus
+</button>
+
+<!-- RESUME TOAST -->
+<div id="resume-toast">
+  <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" style="color:var(--accent2);flex-shrink:0">
+    <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+  </svg>
+  <span>Resume at page <strong id="resume-page-num">—</strong>?</span>
+  <button id="resume-yes" onclick="resumeReading()">Resume</button>
+  <button class="toast-dismiss" onclick="dismissResume()">Dismiss</button>
+</div>
+
+<!-- ESC HINT -->
+<div id="esc-hint">Press F or Esc to exit focus</div>
+
+<!-- ZOOM BADGE -->
+<div id="zoom-badge">
+  <span id="zoom-label">100%</span>
+  <button class="icon-btn" style="width:28px;height:28px" onclick="changeZoom(-0.15)">
+    <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+  </button>
+  <button class="icon-btn" style="width:28px;height:28px" onclick="changeZoom(0.15)">
+    <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+  </button>
+  <button class="icon-btn" style="width:28px;height:28px" onclick="resetZoom()" title="Reset (0)">
+    <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+  </button>
+</div>
+
+<script>
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+  let pdfDoc      = null;
+  let currentPage = 1;
+  let scale       = 1.2;
+  let darkFilter  = true;
+  let zoomTimeout = null;
+  let zoomBadgeTO = null;
+  let ioObserver  = null;
+  let currentFileName = '';    // key for localStorage
+  let savedPageOnLoad = 1;     // page to resume to after render
+
+  const viewer         = document.getElementById('viewer');
+  const pagesContainer = document.getElementById('pages-container');
+  const thumbList      = document.getElementById('thumbnail-list');
+  const pageInfo       = document.getElementById('page-info');
+  const docTitle       = document.getElementById('doc-title');
+  const dropZone       = document.getElementById('drop-zone');
+  const loader         = document.getElementById('loader');
+  const progressBar    = document.getElementById('progress-bar');
+  const zoomBadge      = document.getElementById('zoom-badge');
+  const zoomLabel      = document.getElementById('zoom-label');
+  const btnPrev        = document.getElementById('btn-prev');
+  const btnNext        = document.getElementById('btn-next');
+  const btnZoomIn      = document.getElementById('btn-zoom-in');
+  const btnZoomOut     = document.getElementById('btn-zoom-out');
+  const btnFilter      = document.getElementById('btn-filter');
+  const btnHidePages   = document.getElementById('btn-hide-pages');
+  const btnFocus       = document.getElementById('btn-focus');
+  const resumeToast    = document.getElementById('resume-toast');
+  const resumePageNum  = document.getElementById('resume-page-num');
+
+  // ── LOCAL STORAGE HELPERS ──
+  const LS_PREFIX = 'obsidian_pdf_';
+
+  function lsKey(filename) {
+    // sanitise filename into a safe key
+    return LS_PREFIX + filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+  }
+
+  function saveProgress(filename, page) {
+    try { localStorage.setItem(lsKey(filename), page); } catch (_) {}
+  }
+
+  function loadProgress(filename) {
+    try { return parseInt(localStorage.getItem(lsKey(filename))) || 1; } catch (_) { return 1; }
+  }
+
+  let resumeToastTO = null;
+  function showResumeToast(page) {
+    resumePageNum.textContent = page;
+    resumeToast.classList.add('visible');
+    clearTimeout(resumeToastTO);
+    resumeToastTO = setTimeout(() => dismissResume(), 8000);
+  }
+
+  function dismissResume() {
+    resumeToast.classList.remove('visible');
+    clearTimeout(resumeToastTO);
+  }
+
+  function resumeReading() {
+    dismissResume();
+    scrollToPage(savedPageOnLoad);
+  }
+
+  // ── FILE INPUT ──
+  document.getElementById('file-input').addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (file) loadPDF(file);
+    e.target.value = ''; // allow re-loading same file
+  });
+
+  // ── DRAG & DROP ──
+  viewer.addEventListener('dragover', e => { e.preventDefault(); viewer.classList.add('dragover'); });
+  viewer.addEventListener('dragleave', () => viewer.classList.remove('dragover'));
+  viewer.addEventListener('drop', e => {
+    e.preventDefault(); viewer.classList.remove('dragover');
+    const file = e.dataTransfer.files[0];
+    if (file && file.type === 'application/pdf') loadPDF(file);
+  });
+
+  // ── LOAD PDF ──
+  async function loadPDF(file) {
+    dropZone.classList.add('hidden');
+    loader.classList.add('active');
+    pagesContainer.innerHTML = '';
+    thumbList.innerHTML = '';
+    currentPage = 1;
+    dismissResume();
+
+    currentFileName = file.name;
+    docTitle.textContent = file.name;
+    document.title = `Obsidian — ${file.name}`;
+
+    // Check for saved progress BEFORE rendering
+    savedPageOnLoad = loadProgress(file.name);
+
+    const buf = await file.arrayBuffer();
+    pdfDoc = await pdfjsLib.getDocument({ data: buf }).promise;
+
+    // Clamp saved page to valid range
+    savedPageOnLoad = Math.min(Math.max(savedPageOnLoad, 1), pdfDoc.numPages);
+
+    loader.classList.remove('active');
+    btnPrev.disabled = false;
+    btnNext.disabled = false;
+    btnZoomIn.disabled = false;
+    btnZoomOut.disabled = false;
+
+    await renderAllPages();
+    updatePageInfo();
+    showZoomBadge();
+
+    // Show resume toast if there's a saved page > 1
+    if (savedPageOnLoad > 1) {
+      showResumeToast(savedPageOnLoad);
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  // RENDER ALL PAGES — FULLY SEQUENTIAL, ORDERED
+  //
+  // Root cause of the ordering bug:
+  //   Old code called page.render() inside the same loop iteration
+  //   that appended the wrapper, BUT if two render() calls overlap
+  //   in time, PDF.js may resolve them out-of-insertion order and
+  //   paint pixel data to the wrong canvas (canvas elements were
+  //   created sequentially but reused if innerHTML was cleared).
+  //
+  // Fix: Pre-build ALL DOM nodes first (guarantees order), THEN
+  //   render each page's content strictly one at a time with await.
+  //   This makes it impossible for renders to interleave.
+  // ─────────────────────────────────────────────────────────────────
+  async function renderAllPages() {
+    if (ioObserver) { ioObserver.disconnect(); ioObserver = null; }
+
+    pagesContainer.innerHTML = '';
+    thumbList.innerHTML = '';
+
+    const total = pdfDoc.numPages;
+    progressBar.style.opacity = '1';
+    progressBar.style.transform = 'scaleX(0)';
+    progressBar.style.transition = 'transform 0.15s linear';
+
+    // ── STEP 1: Pre-insert all wrappers in order ──
+    const mainCanvases  = [];
+    const thumbCanvases = [];
+
+    for (let i = 1; i <= total; i++) {
+      // Main page slot
+      const wrapper = document.createElement('div');
+      wrapper.className = 'page-wrapper';
+      wrapper.id = `page-${i}`;
+
+      const canvas = document.createElement('canvas');
+      canvas.className = darkFilter ? 'page-canvas' : 'page-canvas no-filter';
+
+      const label = document.createElement('span');
+      label.className = 'page-num-label';
+      label.textContent = `${i} / ${total}`;
+
+      wrapper.append(canvas, label);
+      pagesContainer.appendChild(wrapper);
+      mainCanvases.push(canvas);
+
+      // Thumbnail slot
+      const thumbItem = document.createElement('div');
+      thumbItem.className = `thumb-item${i === 1 ? ' active' : ''}`;
+      thumbItem.dataset.page = i;
+      thumbItem.addEventListener('click', () => scrollToPage(i));
+
+      const tCanvas = document.createElement('canvas');
+      tCanvas.className = 'thumb-canvas';
+
+      const thumbNum = document.createElement('span');
+      thumbNum.className = 'thumb-num';
+      thumbNum.textContent = i;
+
+      thumbItem.append(tCanvas, thumbNum);
+      thumbList.appendChild(thumbItem);
+      thumbCanvases.push(tCanvas);
+    }
+
+    // ── STEP 2: Render each page strictly sequentially ──
+    for (let i = 1; i <= total; i++) {
+      const page = await pdfDoc.getPage(i);
+
+      // Main render
+      const vp = page.getViewport({ scale });
+      const mc = mainCanvases[i - 1];
+      mc.width  = vp.width;
+      mc.height = vp.height;
+      await page.render({ canvasContext: mc.getContext('2d'), viewport: vp }).promise;
+
+      // Thumbnail render
+      const tvp = page.getViewport({ scale: 0.18 });
+      const tc  = thumbCanvases[i - 1];
+      tc.width  = tvp.width;
+      tc.height = tvp.height;
+      await page.render({ canvasContext: tc.getContext('2d'), viewport: tvp }).promise;
+
+      progressBar.style.transform = `scaleX(${i / total})`;
+    }
+
+    progressBar.style.opacity = '0';
+
+    // ── STEP 3: Scroll spy ──
+    ioObserver = new IntersectionObserver(entries => {
+      let best = null;
+      entries.forEach(en => {
+        if (en.isIntersecting && (!best || en.intersectionRatio > best.intersectionRatio)) best = en;
+      });
+      if (!best) return;
+
+      const pg = parseInt(best.target.id.replace('page-', ''));
+      if (pg === currentPage) return;
+      currentPage = pg;
+      updatePageInfo();
+      saveProgress(currentFileName, pg);  // ← persist last read page
+
+      document.querySelectorAll('.thumb-item').forEach(t => t.classList.remove('active'));
+      const active = document.querySelector(`.thumb-item[data-page="${pg}"]`);
+      if (active) active.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      if (active) active.classList.add('active');
+    }, { root: viewer, threshold: [0.1, 0.3, 0.5, 0.7] });
+
+    document.querySelectorAll('.page-wrapper').forEach(w => ioObserver.observe(w));
+  }
+
+  // ── NAV ──
+  function changePage(dir) {
+    const next = currentPage + dir;
+    if (!pdfDoc || next < 1 || next > pdfDoc.numPages) return;
+    scrollToPage(next);
+  }
+
+  function scrollToPage(n) {
+    const el = document.getElementById(`page-${n}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      currentPage = n;
+      updatePageInfo();
+      saveProgress(currentFileName, n);
+    }
+  }
+
+  function updatePageInfo() {
+    if (!pdfDoc) { pageInfo.textContent = '— / —'; return; }
+    pageInfo.textContent = `${currentPage} / ${pdfDoc.numPages}`;
+    btnPrev.disabled = currentPage <= 1;
+    btnNext.disabled = currentPage >= pdfDoc.numPages;
+  }
+
+  // ── ZOOM ──
+  function showZoomBadge() {
+    zoomBadge.classList.add('visible');
+    clearTimeout(zoomBadgeTO);
+    zoomBadgeTO = setTimeout(() => zoomBadge.classList.remove('visible'), 1800);
+  }
+
+  function changeZoom(delta) {
+    scale = Math.min(3.5, Math.max(0.4, scale + delta));
+    zoomLabel.textContent = `${Math.round(scale / 1.2 * 100)}%`;
+    showZoomBadge();
+    clearTimeout(zoomTimeout);
+    zoomTimeout = setTimeout(() => { if (pdfDoc) renderAllPages(); }, 500);
+  }
+
+  function resetZoom() {
+    scale = 1.2;
+    zoomLabel.textContent = '100%';
+    showZoomBadge();
+    clearTimeout(zoomTimeout);
+    zoomTimeout = setTimeout(() => { if (pdfDoc) renderAllPages(); }, 500);
+  }
+
+  // ── DARK FILTER ──
+  function toggleFilter() {
+    darkFilter = !darkFilter;
+    btnFilter.classList.toggle('active', darkFilter);
+    document.querySelectorAll('.page-canvas').forEach(c => c.classList.toggle('no-filter', !darkFilter));
+  }
+
+  // ── HIDE PAGES PANEL ──
+  function togglePages() {
+    const hidden = document.body.classList.toggle('hide-pages');
+    btnHidePages.classList.toggle('active', hidden);
+  }
+
+  // ── FOCUS MODE ──
+  function toggleFocus() {
+    const on = document.body.classList.toggle('focus-mode');
+    btnFocus.classList.toggle('active', on);
+  }
+
+  // ── KEYBOARD ──
+  document.addEventListener('keydown', e => {
+    if (document.activeElement.tagName === 'INPUT') return;
+    switch (e.key) {
+      case 'ArrowRight': case 'ArrowDown': changePage(1); break;
+      case 'ArrowLeft':  case 'ArrowUp':   changePage(-1); break;
+      case '+': case '=': changeZoom(0.15); break;
+      case '-':           changeZoom(-0.15); break;
+      case '0':           resetZoom(); break;
+      case 'f': case 'F': toggleFocus(); break;
+      case 'p': case 'P': togglePages(); break;
+      case 'd': case 'D': toggleFilter(); break;
+      case 'Escape':
+        if (document.body.classList.contains('focus-mode')) toggleFocus();
+        break;
+    }
+  });
+
+  // ── CTRL+SCROLL ZOOM ──
+  viewer.addEventListener('wheel', e => {
+    if (e.ctrlKey) { e.preventDefault(); changeZoom(e.deltaY < 0 ? 0.1 : -0.1); }
+  }, { passive: false });
+</script>
+</body>
+</html>

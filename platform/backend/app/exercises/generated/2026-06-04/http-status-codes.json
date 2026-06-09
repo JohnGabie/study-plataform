@@ -1,0 +1,64 @@
+{
+  "id": "b1e2c3d4-0001-4abc-9def-100000000001",
+  "title": "Classificar código de status HTTP",
+  "slug": "http-status-codes",
+  "difficulty": "8kyu",
+  "phase": 1,
+  "module": "http",
+  "tags": ["http", "status-codes", "backend"],
+  "concepts": ["http:status-codes"],
+  "description": "## Classificar código de status HTTP\n\nEscreva uma função que recebe um código de status HTTP e retorna a categoria como string.\n\n### Categorias\n- `1xx` → `\"informational\"`\n- `2xx` → `\"success\"`\n- `3xx` → `\"redirection\"`\n- `4xx` → `\"client_error\"`\n- `5xx` → `\"server_error\"`\n- outro → `\"unknown\"`\n\n### Exemplos\n```python\nclassificar_status(200)  # \"success\"\nclassificar_status(404)  # \"client_error\"\nclassificar_status(500)  # \"server_error\"\nclassificar_status(301)  # \"redirection\"\n```\n\n**Por que isso importa:** toda API que você escreve retorna status codes. Saber o que cada faixa significa é o mínimo para debugar e projetar APIs REST corretas.",
+  "rationale": "Introdução ao conceito http:status-codes — zero tentativas neste conceito. Exercício direto que força memorização das 5 faixas através da prática.",
+  "stub": "def classificar_status(codigo: int) -> str:\n    pass",
+  "solution": "def classificar_status(codigo: int) -> str:\n    if 100 <= codigo < 200:\n        return \"informational\"\n    elif 200 <= codigo < 300:\n        return \"success\"\n    elif 300 <= codigo < 400:\n        return \"redirection\"\n    elif 400 <= codigo < 500:\n        return \"client_error\"\n    elif 500 <= codigo < 600:\n        return \"server_error\"\n    return \"unknown\"",
+  "test_cases": [
+    {
+      "id": 1,
+      "description": "200 OK",
+      "input": "[200]",
+      "expected": "\"success\"",
+      "visible": true
+    },
+    {
+      "id": 2,
+      "description": "404 Not Found",
+      "input": "[404]",
+      "expected": "\"client_error\"",
+      "visible": true
+    },
+    {
+      "id": 3,
+      "description": "500 Internal Server Error",
+      "input": "[500]",
+      "expected": "\"server_error\"",
+      "visible": true
+    },
+    {
+      "id": 4,
+      "description": "301 Moved Permanently",
+      "input": "[301]",
+      "expected": "\"redirection\"",
+      "visible": false
+    },
+    {
+      "id": 5,
+      "description": "201 Created",
+      "input": "[201]",
+      "expected": "\"success\"",
+      "visible": false
+    },
+    {
+      "id": 6,
+      "description": "código inválido",
+      "input": "[999]",
+      "expected": "\"unknown\"",
+      "visible": false
+    }
+  ],
+  "hints": [
+    "Use divisão inteira: codigo // 100 te diz a faixa",
+    "200 // 100 == 2, 404 // 100 == 4, 500 // 100 == 5"
+  ],
+  "generated_by": "agent",
+  "book_reference": "HTTP: The Definitive Guide — Cap. 3: HTTP Messages"
+}

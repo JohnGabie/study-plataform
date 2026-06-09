@@ -1,0 +1,50 @@
+{
+  "id": "b1e2c3d4-0005-4abc-9def-100000000005",
+  "title": "Identificar uso correto de async/await",
+  "slug": "python-async-await",
+  "difficulty": "7kyu",
+  "phase": 1,
+  "module": "python-avancado",
+  "tags": ["async", "await", "coroutine", "python"],
+  "concepts": ["python:async"],
+  "description": "## Identificar uso correto de async/await\n\nDada uma lista de afirmações sobre `async`/`await` em Python, retorne quantas são verdadeiras.\n\n### Afirmações possíveis\n- `\"async_def_cria_coroutine\"` → **True** — `async def` sempre cria uma coroutine\n- `\"await_fora_de_async_funciona\"` → **False** — `await` só funciona dentro de `async def`\n- `\"asyncio_run_executa_coroutine\"` → **True** — `asyncio.run()` é o ponto de entrada\n- `\"sync_dentro_de_async_bloqueia\"` → **True** — chamar função síncrona bloqueante dentro de async bloqueia o event loop\n- `\"await_so_com_awaitable\"` → **True** — só pode `await` objetos awaitable (coroutines, Tasks, Futures)\n\n### Exemplos\n```python\ncontar_verdadeiras([\"async_def_cria_coroutine\", \"await_fora_de_async_funciona\"])\n# 1  (só a primeira é True)\n\ncontar_verdadeiras([\"asyncio_run_executa_coroutine\", \"await_so_com_awaitable\"])\n# 2  (as duas são True)\n```",
+  "rationale": "python:async sem tentativas. Exercício conceptual que força o aluno a distinguir o que é verdade sobre async/await sem escrever código async — o entendimento precede a prática.",
+  "stub": "def contar_verdadeiras(afirmacoes: list) -> int:\n    pass",
+  "solution": "def contar_verdadeiras(afirmacoes: list) -> int:\n    verdades = {\n        \"async_def_cria_coroutine\",\n        \"asyncio_run_executa_coroutine\",\n        \"sync_dentro_de_async_bloqueia\",\n        \"await_so_com_awaitable\",\n    }\n    return sum(1 for a in afirmacoes if a in verdades)",
+  "test_cases": [
+    {
+      "id": 1,
+      "description": "uma verdadeira, uma falsa",
+      "input": "[[\"async_def_cria_coroutine\", \"await_fora_de_async_funciona\"]]",
+      "expected": "1",
+      "visible": true
+    },
+    {
+      "id": 2,
+      "description": "duas verdadeiras",
+      "input": "[[\"asyncio_run_executa_coroutine\", \"await_so_com_awaitable\"]]",
+      "expected": "2",
+      "visible": true
+    },
+    {
+      "id": 3,
+      "description": "todas as verdadeiras",
+      "input": "[[\"async_def_cria_coroutine\", \"asyncio_run_executa_coroutine\", \"sync_dentro_de_async_bloqueia\", \"await_so_com_awaitable\"]]",
+      "expected": "4",
+      "visible": false
+    },
+    {
+      "id": 4,
+      "description": "nenhuma verdadeira",
+      "input": "[[\"await_fora_de_async_funciona\"]]",
+      "expected": "0",
+      "visible": false
+    }
+  ],
+  "hints": [
+    "`await` fora de `async def` levanta SyntaxError — não é um erro de runtime, é de sintaxe",
+    "O event loop é single-threaded. Uma operação síncrona bloqueante (como time.sleep) congela tudo"
+  ],
+  "generated_by": "agent",
+  "book_reference": "Python Concurrency with asyncio — Cap. 2: asyncio Basics"
+}

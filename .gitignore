@@ -1,0 +1,60 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Uploads (PDFs, covers)
+platform/backend/app/uploads/
+
+# Node
+node_modules/
+.npm/
+
+# Frontend build
+platform/frontend/dist/
+platform/frontend/.vite/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Obsidian
+.obsidian/
+vault-obsidian/
+
+# PDFs in root
+Nova pasta/
+*.pdf
+
+# Logs
+agent/logs/
+*.log
+
+# study-backend is a separate repo — tracked as submodule or excluded
+study-backend/

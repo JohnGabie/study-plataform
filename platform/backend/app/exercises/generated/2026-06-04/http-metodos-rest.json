@@ -1,0 +1,64 @@
+{
+  "id": "b1e2c3d4-0002-4abc-9def-100000000002",
+  "title": "Identificar método HTTP correto para cada operação",
+  "slug": "http-metodos-rest",
+  "difficulty": "8kyu",
+  "phase": 1,
+  "module": "http",
+  "tags": ["http", "rest", "methods", "api"],
+  "concepts": ["http:methods", "http:rest"],
+  "description": "## Método HTTP correto para cada operação\n\nDada uma descrição de operação REST, retorne o método HTTP correto.\n\n### Mapeamento\n- criar um recurso novo → `\"POST\"`\n- buscar um recurso ou lista → `\"GET\"`\n- substituir um recurso completo → `\"PUT\"`\n- atualizar campos parciais → `\"PATCH\"`\n- deletar um recurso → `\"DELETE\"`\n- outra operação → `\"UNKNOWN\"`\n\n### Exemplos\n```python\nmetodo_para(\"criar\")    # \"POST\"\nmetodo_para(\"buscar\")   # \"GET\"\nmetodo_para(\"deletar\")  # \"DELETE\"\nmetodo_para(\"atualizar_parcial\")  # \"PATCH\"\n```",
+  "rationale": "Conceito http:methods sem tentativas. A confusão entre PUT e PATCH é um gap clássico — este exercício força a distinção semântica.",
+  "stub": "def metodo_para(operacao: str) -> str:\n    \"\"\"operacao: 'criar' | 'buscar' | 'substituir' | 'atualizar_parcial' | 'deletar'\"\"\"\n    pass",
+  "solution": "def metodo_para(operacao: str) -> str:\n    mapa = {\n        \"criar\": \"POST\",\n        \"buscar\": \"GET\",\n        \"substituir\": \"PUT\",\n        \"atualizar_parcial\": \"PATCH\",\n        \"deletar\": \"DELETE\",\n    }\n    return mapa.get(operacao, \"UNKNOWN\")",
+  "test_cases": [
+    {
+      "id": 1,
+      "description": "criar recurso",
+      "input": "[\"criar\"]",
+      "expected": "\"POST\"",
+      "visible": true
+    },
+    {
+      "id": 2,
+      "description": "buscar recurso",
+      "input": "[\"buscar\"]",
+      "expected": "\"GET\"",
+      "visible": true
+    },
+    {
+      "id": 3,
+      "description": "atualização parcial vs substituição completa",
+      "input": "[\"atualizar_parcial\"]",
+      "expected": "\"PATCH\"",
+      "visible": true
+    },
+    {
+      "id": 4,
+      "description": "substituição completa",
+      "input": "[\"substituir\"]",
+      "expected": "\"PUT\"",
+      "visible": false
+    },
+    {
+      "id": 5,
+      "description": "deletar",
+      "input": "[\"deletar\"]",
+      "expected": "\"DELETE\"",
+      "visible": false
+    },
+    {
+      "id": 6,
+      "description": "operação desconhecida",
+      "input": "[\"voar\"]",
+      "expected": "\"UNKNOWN\"",
+      "visible": false
+    }
+  ],
+  "hints": [
+    "GET é idempotente e seguro — não muda estado no servidor",
+    "A diferença entre PUT e PATCH: PUT substitui o recurso inteiro, PATCH muda só os campos enviados"
+  ],
+  "generated_by": "agent",
+  "book_reference": "REST API Design Rulebook — Cap. 2: Identifier Design with URIs"
+}

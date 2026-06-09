@@ -1,0 +1,6 @@
+{
+  "message": "Sua performance em exercícios de HTTP está sólida — acerto consistente em status codes e métodos. O ponto fraco identificado é `python:functions`: especificamente closures e escopo de variáveis. Os exercícios de FastAPI que você tentou usavam funções aninhadas (dependency injection) e a dificuldade ali provavelmente tem raiz nisso. Adicionei 2 exercícios: um sobre closures simples e um sobre `*args`/`**kwargs` na assinatura de funções.",
+  "generated_at": "2026-06-07T06:00:00",
+  "highlights": ["http:methods", "http:status-codes"],
+  "gaps": ["python:functions", "fastapi:pydantic"]
+}

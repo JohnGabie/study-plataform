@@ -1,0 +1,51 @@
+{
+  "id": "a3f1c2d4-0002-4abc-9def-000000000002",
+  "title": "Retornar vs imprimir",
+  "slug": "retornar-vs-imprimir",
+  "difficulty": "8kyu",
+  "phase": 1,
+  "module": "funcoes",
+  "tags": ["return", "print", "funcoes", "fundamentos"],
+  "concepts": ["python:functions"],
+  "description": "## Retornar vs imprimir\n\nEscreva uma função que calcula a média de uma lista de números.\n\nA função deve **retornar** o resultado — não imprimir.\n\n### Exemplos\n```python\nresultado = calcular_media([10, 20, 30])\nprint(resultado)  # 20.0\n\nresultado = calcular_media([5, 15])\nprint(resultado)  # 10.0\n```\n\n**Por que isso importa:** uma função que usa `print` em vez de `return` não pode ser usada em cálculos. `calcular_media([1,2,3]) * 2` precisa de um valor — `None` não multiplica.",
+  "rationale": "Lacuna 🟡 em student/profile.md: 'return vs print' — gap de fundamento ainda não estudado. O exercício evidencia a diferença de forma prática: os testes vão falhar silenciosamente se o aluno usar print porque a função retorna None.",
+  "stub": "def calcular_media(numeros: list) -> float:\n    pass",
+  "solution": "def calcular_media(numeros: list) -> float:\n    return sum(numeros) / len(numeros)",
+  "test_cases": [
+    {
+      "id": 1,
+      "description": "três números",
+      "input": "[[10, 20, 30]]",
+      "expected": "20.0",
+      "visible": true
+    },
+    {
+      "id": 2,
+      "description": "dois números",
+      "input": "[[5, 15]]",
+      "expected": "10.0",
+      "visible": true
+    },
+    {
+      "id": 3,
+      "description": "número único",
+      "input": "[[42]]",
+      "expected": "42.0",
+      "visible": true
+    },
+    {
+      "id": 4,
+      "description": "floats",
+      "input": "[[1.5, 2.5, 3.0]]",
+      "expected": "2.3333333333333335",
+      "visible": false
+    }
+  ],
+  "hints": [
+    "A função deve terminar com return, não print",
+    "sum(lista) / len(lista) calcula a média"
+  ],
+  "created_at": "2026-06-04T06:00:00",
+  "generated_by": "seed",
+  "book_reference": "Effective Python — Item 19"
+}

@@ -1,0 +1,57 @@
+{
+  "id": "b1e2c3d4-0004-4abc-9def-100000000004",
+  "title": "Status code correto para cada cenário FastAPI",
+  "slug": "fastapi-status-code-correto",
+  "difficulty": "7kyu",
+  "phase": 1,
+  "module": "fastapi",
+  "tags": ["fastapi", "http", "status-codes", "api-design"],
+  "concepts": ["http:status-codes", "fastapi:routing"],
+  "description": "## Status code correto para cada cenário FastAPI\n\nDado um cenário de endpoint, retorne o status code HTTP mais adequado.\n\n### Cenários\n- recurso criado com sucesso → `201`\n- recurso não encontrado → `404`\n- dados de entrada inválidos → `422`\n- operação proibida (sem permissão) → `403`\n- sucesso sem conteúdo para retornar → `204`\n- sucesso com dados → `200`\n- conflito (ex: email já existe) → `409`\n\n### Exemplos\n```python\nstatus_para(\"criado\")        # 201\nstatus_para(\"nao_encontrado\") # 404\nstatus_para(\"invalido\")      # 422\n```\n\n**Por que isso importa:** usar 200 para tudo é o erro mais comum em APIs vibecoded. O cliente precisa do status code correto para saber o que fazer com a resposta.",
+  "rationale": "Conecta http:status-codes com fastapi:routing. Força distinção entre 200/201/204 e entre 401/403/404/422 — confusões documentadas no perfil do aluno.",
+  "stub": "def status_para(cenario: str) -> int:\n    pass",
+  "solution": "def status_para(cenario: str) -> int:\n    mapa = {\n        \"criado\": 201,\n        \"nao_encontrado\": 404,\n        \"invalido\": 422,\n        \"proibido\": 403,\n        \"sem_conteudo\": 204,\n        \"sucesso\": 200,\n        \"conflito\": 409,\n    }\n    return mapa.get(cenario, 200)",
+  "test_cases": [
+    {
+      "id": 1,
+      "description": "POST que cria recurso com sucesso",
+      "input": "[\"criado\"]",
+      "expected": "201",
+      "visible": true
+    },
+    {
+      "id": 2,
+      "description": "GET de recurso que não existe",
+      "input": "[\"nao_encontrado\"]",
+      "expected": "404",
+      "visible": true
+    },
+    {
+      "id": 3,
+      "description": "validação de Pydantic falha",
+      "input": "[\"invalido\"]",
+      "expected": "422",
+      "visible": true
+    },
+    {
+      "id": 4,
+      "description": "DELETE sem body de retorno",
+      "input": "[\"sem_conteudo\"]",
+      "expected": "204",
+      "visible": false
+    },
+    {
+      "id": 5,
+      "description": "email duplicado no cadastro",
+      "input": "[\"conflito\"]",
+      "expected": "409",
+      "visible": false
+    }
+  ],
+  "hints": [
+    "201 é para criação bem-sucedida. 200 é para leitura/atualização com retorno.",
+    "422 é o padrão do FastAPI para erros de validação Pydantic — não use 400 para isso"
+  ],
+  "generated_by": "agent",
+  "book_reference": "Building FastAPI — Cap. 5: Dependency Injection"
+}

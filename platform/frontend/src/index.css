@@ -1,0 +1,205 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&display=swap');
+@import "tailwindcss";
+
+:root {
+  --bg:           #0a0a0a;
+  --bg-card:      #111111;
+  --bg-hover:     #161616;
+  --border:       #222222;
+  --border-lit:   #2e2e2e;
+
+  --cyan:         #22d3ee;
+  --cyan-hi:      #67e8f9;
+  --cyan-faint:   rgba(34, 211, 238, 0.07);
+  --cyan-glow:    rgba(34, 211, 238, 0.22);
+
+  --text:         #f0f0f0;
+  --muted:        #717171;
+  --faint:        #2a2a2a;
+
+  --green:        #22c55e;
+  --red:          #ef4444;
+  --yellow:       #eab308;
+  --blue:         #3b82f6;
+
+  --font:      'JetBrains Mono', monospace;
+  --f-display: 'JetBrains Mono', monospace;
+  --f-body:    'JetBrains Mono', monospace;
+  --f-mono:    'JetBrains Mono', monospace;
+
+  --rail: 70px;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 13px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+}
+
+::-webkit-scrollbar { width: 3px; height: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-lit); border-radius: 4px; }
+
+.f-display { font-family: var(--font); }
+.f-mono    { font-family: var(--font); }
+
+/* ─── Card ─────────────────────────────────────────────── */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.card-hover {
+  cursor: pointer;
+  transition: border-color 150ms, background 150ms;
+}
+.card-hover:hover {
+  border-color: var(--border-lit);
+  background: var(--bg-hover);
+}
+
+/* ─── Icon Rail Nav ─────────────────────────────────────── */
+.rail-item {
+  position: relative;
+  width: 42px; height: 42px;
+  border-radius: 7px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--muted);
+  text-decoration: none;
+  transition: color 130ms, background 130ms;
+  cursor: pointer;
+  border: none; background: none;
+}
+.rail-item:hover { color: var(--text); background: var(--bg-hover); }
+.rail-item.active { color: var(--cyan); background: var(--cyan-faint); }
+.rail-item.active::before {
+  content: '';
+  position: absolute;
+  left: -10px; top: 50%;
+  transform: translateY(-50%);
+  width: 2px; height: 16px;
+  background: var(--cyan);
+  border-radius: 0 2px 2px 0;
+}
+
+.rail-item .tip {
+  position: absolute;
+  left: calc(100% + 10px); top: 50%;
+  transform: translateY(-50%);
+  background: var(--bg-card);
+  border: 1px solid var(--border-lit);
+  border-radius: 5px;
+  padding: 4px 10px;
+  font-size: 11px; font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0; transition: opacity 100ms;
+  z-index: 200;
+}
+.rail-item:hover .tip { opacity: 1; }
+
+/* ─── Diff badge ────────────────────────────────────────── */
+.diff-badge {
+  font-size: 10px; font-weight: 700;
+  padding: 2px 6px; border-radius: 3px;
+  border: 1px solid currentColor;
+  background: transparent;
+  letter-spacing: 0.04em;
+  font-family: var(--f-mono);
+}
+
+/* ─── Buttons ───────────────────────────────────────────── */
+.btn {
+  font-family: var(--font);
+  font-weight: 600; font-size: 12px;
+  padding: 6px 14px; border-radius: 5px;
+  border: 1px solid transparent;
+  cursor: pointer; letter-spacing: 0.02em;
+  transition: background 120ms, border-color 120ms;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.btn:active { opacity: 0.8; }
+.btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.btn-cyan {
+  background: var(--cyan-faint);
+  border-color: rgba(34, 211, 238, 0.3);
+  color: var(--cyan);
+}
+.btn-cyan:not(:disabled):hover {
+  background: rgba(34, 211, 238, 0.11);
+  border-color: rgba(34, 211, 238, 0.5);
+}
+.btn-green {
+  background: rgba(34, 197, 94, 0.07);
+  border-color: rgba(34, 197, 94, 0.3);
+  color: var(--green);
+}
+.btn-green:not(:disabled):hover { background: rgba(34, 197, 94, 0.13); }
+
+/* ─── Tags ──────────────────────────────────────────────── */
+.tag {
+  font-size: 10px; font-weight: 500;
+  padding: 2px 6px; border-radius: 3px;
+  background: rgba(255,255,255,0.03);
+  color: var(--muted);
+  border: 1px solid var(--border);
+  letter-spacing: 0.02em;
+}
+
+.hint-block {
+  background: rgba(34,211,238,0.04);
+  border: 1px solid rgba(34,211,238,0.12);
+  border-radius: 5px; padding: 10px 14px;
+}
+
+/* ─── Labels ────────────────────────────────────────────── */
+.stat-label {
+  font-size: 10px; font-weight: 600;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--muted);
+}
+.section-label {
+  font-size: 10px; font-weight: 600;
+  letter-spacing: 0.10em; text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* ─── Divider with label ────────────────────────────────── */
+.divider-label {
+  display: flex; align-items: center; gap: 12px;
+  margin-bottom: 2px;
+}
+.divider-label::after {
+  content: '';
+  flex: 1; height: 1px;
+  background: var(--border);
+}
+
+/* ─── Animations ────────────────────────────────────────── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(5px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+@keyframes animStar {
+  from { transform: translateY(0); }
+  to   { transform: translateY(-2000px); }
+}
+.fade-up { animation: fadeUp 240ms ease forwards; }
+.fade-in { animation: fadeIn 200ms ease forwards; }

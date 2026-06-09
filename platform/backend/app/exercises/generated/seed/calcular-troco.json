@@ -1,0 +1,51 @@
+{
+  "id": "a3f1c2d4-0003-4abc-9def-000000000003",
+  "title": "Calcular troco sem erros de float",
+  "slug": "calcular-troco",
+  "difficulty": "8kyu",
+  "phase": 1,
+  "module": "tipos-numericos",
+  "tags": ["Decimal", "float", "dinheiro", "tipos"],
+  "concepts": ["python:types"],
+  "description": "## Calcular troco sem erros de float\n\nEscreva uma função que calcula o troco de uma compra. O resultado deve ser **exato**.\n\n### O problema com float\n```python\n10.0 - 9.99  # 0.010000000000000675  ← ERRADO\n```\n\n### O que a função deve retornar\n```python\ncalcular_troco(10.0, 9.99)  # \"0.01\"\ncalcular_troco(50.0, 37.50) # \"12.50\"\n```\n\n**Dica:** `from decimal import Decimal` — use `Decimal(str(valor))` para converter floats.",
+  "rationale": "Lacuna 🔴 ativa: 'FLOAT para dinheiro — sugere DOUBLE como fix. Errado.' Este exercício demonstra o problema concretamente e força o uso de Decimal.",
+  "stub": "from decimal import Decimal\n\ndef calcular_troco(pagamento: float, total: float) -> str:\n    \"\"\"Retorna o troco como string com precisão exata.\"\"\"\n    pass",
+  "solution": "from decimal import Decimal\n\ndef calcular_troco(pagamento: float, total: float) -> str:\n    troco = Decimal(str(pagamento)) - Decimal(str(total))\n    return str(troco)",
+  "test_cases": [
+    {
+      "id": 1,
+      "description": "caso clássico de imprecisão float",
+      "input": "[10.0, 9.99]",
+      "expected": "\"0.01\"",
+      "visible": true
+    },
+    {
+      "id": 2,
+      "description": "valor redondo",
+      "input": "[50.0, 37.50]",
+      "expected": "\"12.50\"",
+      "visible": true
+    },
+    {
+      "id": 3,
+      "description": "troco zero",
+      "input": "[20.0, 20.0]",
+      "expected": "\"0.0\"",
+      "visible": true
+    },
+    {
+      "id": 4,
+      "description": "centavos fracionados",
+      "input": "[100.0, 66.67]",
+      "expected": "\"33.33\"",
+      "visible": false
+    }
+  ],
+  "hints": [
+    "float(0.1) + float(0.2) == 0.30000000000000004 — o erro existe na representação binária",
+    "Decimal(str(0.1)) converte via string, evitando o erro de representação"
+  ],
+  "created_at": "2026-06-04T06:00:00",
+  "generated_by": "seed",
+  "book_reference": "Fluent Python — Cap. 2: An Array of Sequences"
+}

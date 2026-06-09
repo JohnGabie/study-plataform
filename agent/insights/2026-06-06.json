@@ -1,0 +1,6 @@
+{
+  "message": "Sessão curta hoje — 1 exercício tentado, não passou. O kata era sobre validação com Pydantic. O erro foi em schema aninhado: você passou um dict onde era esperado um objeto tipado. Esse padrão aparece bastante no ZionHub (models de request). Não vou aumentar dificuldade ainda — próxima leva vai consolidar Pydantic básico antes de seguir para autenticação.",
+  "generated_at": "2026-06-06T06:00:00",
+  "highlights": ["fastapi:routing"],
+  "gaps": ["fastapi:pydantic", "python:types"]
+}

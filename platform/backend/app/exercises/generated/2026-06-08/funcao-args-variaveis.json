@@ -1,0 +1,50 @@
+{
+  "id": "c2e4f6a8-0001-4abc-9def-200000000001",
+  "title": "Função com número variável de argumentos",
+  "slug": "funcao-args-variaveis",
+  "difficulty": "8kyu",
+  "phase": 1,
+  "module": "funcoes",
+  "tags": ["args", "funcoes", "python", "fundamentos"],
+  "concepts": ["python:functions"],
+  "description": "Você precisa criar uma função que receba qualquer quantidade de ingredientes e retorne uma string formatada.\n\n**Exemplo:**\n```python\nlistar_ingredientes(\"maçã\", \"banana\", \"laranja\")\n# → \"Ingredientes: maçã, banana, laranja\"\n\nlistar_ingredientes()\n# → \"Ingredientes: nenhum\"\n```\n\nUse `*args` para aceitar qualquer número de argumentos posicionais.",
+  "rationale": "Primeira execução do agente — aluno sem atividade nos últimos 3 dias, calibração de reengajamento. *args/*kwargs é um dos gaps identificados no perfil (Fase 1, roadmap item explícito). Exercício curto e concreto para baixar a barreira de entrada.",
+  "stub": "def listar_ingredientes(*ingredientes):\n    pass\n",
+  "solution": "def listar_ingredientes(*ingredientes):\n    if not ingredientes:\n        return \"Ingredientes: nenhum\"\n    return \"Ingredientes: \" + \", \".join(ingredientes)\n",
+  "test_cases": [
+    {
+      "id": 1,
+      "description": "Três ingredientes",
+      "input": "[\"maçã\", \"banana\", \"laranja\"]",
+      "expected": "Ingredientes: maçã, banana, laranja",
+      "visible": true
+    },
+    {
+      "id": 2,
+      "description": "Um único ingrediente",
+      "input": "[\"leite\"]",
+      "expected": "Ingredientes: leite",
+      "visible": true
+    },
+    {
+      "id": 3,
+      "description": "Nenhum ingrediente",
+      "input": "[]",
+      "expected": "Ingredientes: nenhum",
+      "visible": true
+    },
+    {
+      "id": 4,
+      "description": "Quatro ingredientes",
+      "input": "[\"pão\", \"queijo\", \"presunto\", \"alface\"]",
+      "expected": "Ingredientes: pão, queijo, presunto, alface",
+      "visible": false
+    }
+  ],
+  "hints": [
+    "Use *ingredientes na assinatura para capturar todos os argumentos como uma tupla.",
+    "Tuplas têm o método .join? Não — mas strings têm: \", \".join(tupla) funciona porque join itera qualquer sequência."
+  ],
+  "generated_by": "agent",
+  "book_reference": "Effective Python — Item 22: Reduce Visual Noise with Variable Positional Arguments"
+}

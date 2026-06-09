@@ -1,0 +1,43 @@
+{
+  "id": "b1e2c3d4-0003-4abc-9def-100000000003",
+  "title": "Construir query SQL com GROUP BY e COUNT",
+  "slug": "sql-contar-por-grupo",
+  "difficulty": "7kyu",
+  "phase": 2,
+  "module": "sql",
+  "tags": ["sql", "group-by", "count", "agregacao"],
+  "concepts": ["sql:aggregations", "sql:select"],
+  "description": "## Construir query SQL com GROUP BY e COUNT\n\nVocê recebe o nome de uma tabela e uma coluna. Retorne a query SQL que conta quantas linhas existem por valor daquela coluna.\n\n### Exemplos\n```python\nquery_count_por_grupo(\"pedidos\", \"status\")\n# \"SELECT status, COUNT(*) as total FROM pedidos GROUP BY status\"\n\nquery_count_por_grupo(\"usuarios\", \"pais\")\n# \"SELECT pais, COUNT(*) as total FROM usuarios GROUP BY pais\"\n```\n\n**Por que isso importa:** GROUP BY + COUNT é a query mais usada em analytics de backend. Dashboards, relatórios, métricas — tudo usa esse padrão.",
+  "rationale": "Conceito sql:aggregations sem tentativas. Exercício introdutório que força a sintaxe correta de GROUP BY antes de avançar para JOINs.",
+  "stub": "def query_count_por_grupo(tabela: str, coluna: str) -> str:\n    pass",
+  "solution": "def query_count_por_grupo(tabela: str, coluna: str) -> str:\n    return f\"SELECT {coluna}, COUNT(*) as total FROM {tabela} GROUP BY {coluna}\"",
+  "test_cases": [
+    {
+      "id": 1,
+      "description": "contar pedidos por status",
+      "input": "[\"pedidos\", \"status\"]",
+      "expected": "\"SELECT status, COUNT(*) as total FROM pedidos GROUP BY status\"",
+      "visible": true
+    },
+    {
+      "id": 2,
+      "description": "contar usuários por país",
+      "input": "[\"usuarios\", \"pais\"]",
+      "expected": "\"SELECT pais, COUNT(*) as total FROM usuarios GROUP BY pais\"",
+      "visible": true
+    },
+    {
+      "id": 3,
+      "description": "contar produtos por categoria",
+      "input": "[\"produtos\", \"categoria\"]",
+      "expected": "\"SELECT categoria, COUNT(*) as total FROM produtos GROUP BY categoria\"",
+      "visible": false
+    }
+  ],
+  "hints": [
+    "A estrutura é: SELECT coluna, COUNT(*) as total FROM tabela GROUP BY coluna",
+    "Toda coluna que não é agregada (não está dentro de COUNT/SUM/AVG) deve aparecer no GROUP BY"
+  ],
+  "generated_by": "agent",
+  "book_reference": "Learning SQL — Cap. 8: Grouping and Aggregates"
+}
