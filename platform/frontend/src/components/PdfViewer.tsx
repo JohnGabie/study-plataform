@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import * as pdfjsLib from 'pdfjs-dist'
+import api from '../api/client'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs'
 
@@ -9,6 +10,9 @@ interface Props {
   slug: string
   onLoadSuccess: (numPages: number) => void
   onPageChange:  (page: number) => void
+  onToggleText?: () => void
+  textMode?: boolean
+  extractingText?: boolean
 }
 
 const ZOOM_STEPS = [0.5, 0.7, 0.85, 1.0, 1.25, 1.5, 2.0]
@@ -33,7 +37,7 @@ function Divider() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-export default function PdfViewer({ slug, onLoadSuccess, onPageChange }: Props) {
+export default function PdfViewer({ slug, onLoadSuccess, onPageChange, onToggleText, textMode = false, extractingText = false }: Props) {
   const wrapRef  = useRef<HTMLDivElement>(null)
   const pagesRef = useRef<HTMLDivElement>(null)
   const msgRef   = useRef<HTMLDivElement>(null)
@@ -48,6 +52,8 @@ export default function PdfViewer({ slug, onLoadSuccess, onPageChange }: Props) 
 
   // Tracks whether prefs were already loaded from backend (prevents saving on initial load)
   const prefsLoadedRef = useRef(false)
+  // Stores the last_page received on load so we can restore scroll after render
+  const lastPageRef = useRef(1)
 
   // Ref so the render effect can read latest darkMode without being in its deps
   const darkModeRef = useRef(darkMode)
@@ -56,25 +62,32 @@ export default function PdfViewer({ slug, onLoadSuccess, onPageChange }: Props) 
   // ── Load prefs from backend on slug change ────────────────────────────────
   useEffect(() => {
     prefsLoadedRef.current = false
-    fetch(`/api/books/${slug}/prefs`)
-      .then(r => r.json())
-      .then(data => {
-        setDarkMode(data.dark_mode ?? false)
-        setViewMode(data.view_mode ?? 'single')
+    api.get(`/books/${slug}/prefs`)
+      .then(r => {
+        setDarkMode(r.data.dark_mode ?? false)
+        setViewMode(r.data.view_mode ?? 'single')
+        lastPageRef.current = r.data.last_page ?? 1
         prefsLoadedRef.current = true
       })
       .catch(() => { prefsLoadedRef.current = true })
   }, [slug])
 
-  // ── Save prefs to backend when they change (after initial load) ───────────
+  // ── Save dark_mode / view_mode immediately ───────────────────────────────
   useEffect(() => {
     if (!prefsLoadedRef.current) return
-    fetch(`/api/books/${slug}/prefs`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ dark_mode: darkMode, view_mode: viewMode }),
-    }).catch(() => {})
-  }, [darkMode, viewMode, slug])
+    api.patch(`/books/${slug}/prefs`, { dark_mode: darkMode, view_mode: viewMode, last_page: currentPage })
+      .catch(() => {})
+  }, [darkMode, viewMode, slug]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Save last_page with debounce (avoids request on every scroll event) ──
+  useEffect(() => {
+    if (!prefsLoadedRef.current) return
+    const t = setTimeout(() => {
+      api.patch(`/books/${slug}/prefs`, { dark_mode: darkMode, view_mode: viewMode, last_page: currentPage })
+        .catch(() => {})
+    }, 1500)
+    return () => clearTimeout(t)
+  }, [currentPage, slug]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Save zoom to localStorage (device-local) ──────────────────────────────
   useEffect(() => {
@@ -105,7 +118,8 @@ export default function PdfViewer({ slug, onLoadSuccess, onPageChange }: Props) 
     msg.style.display = 'flex'
     msg.textContent   = 'carregando PDF...'
 
-    pdfjsLib.getDocument({ url: `/api/books/${slug}/pdf` }).promise
+    api.get(`/books/${slug}/pdf`, { responseType: 'arraybuffer' })
+      .then(r => pdfjsLib.getDocument({ data: new Uint8Array(r.data) }).promise)
       .then(async doc => {
         if (cancelled) return
         const total = doc.numPages
@@ -148,18 +162,57 @@ export default function PdfViewer({ slug, onLoadSuccess, onPageChange }: Props) 
           }
         }
 
-        // STEP 2 — render each page strictly sequentially
-        for (let i = 0; i < total; i++) {
+        // STEP 2 — fetch all page objects in parallel (metadata only, no rasterisation)
+        const pageObjects = await Promise.all(
+          Array.from({ length: total }, (_, i) => doc.getPage(i + 1))
+        )
+        if (cancelled) return
+
+        // STEP 3 — pre-size every canvas so scroll positions are accurate
+        pageObjects.forEach((page, i) => {
+          const scale = pageW / page.getViewport({ scale: 1 }).width
+          const vp    = page.getViewport({ scale })
+          const cv    = canvases[i]
+          cv.width         = Math.floor(vp.width  * dpr)
+          cv.height        = Math.floor(vp.height * dpr)
+          cv.style.width   = Math.floor(vp.width)  + 'px'
+          cv.style.height  = Math.floor(vp.height) + 'px'
+        })
+
+        // STEP 4 — scroll to saved page immediately (sizes are already set)
+        const savedPage = lastPageRef.current
+        if (savedPage > 1) {
+          const el = pages.querySelector(`[data-page="${savedPage}"]`)
+          if (el) {
+            el.scrollIntoView({ behavior: 'instant', block: 'start' })
+            setCurrentPage(savedPage)
+            onPageChange(savedPage)
+          }
+        }
+
+        // STEP 5 — render pages: saved-page area first, then outward
+        const renderOrder: number[] = []
+        const seen = new Set<number>()
+        for (let delta = 0; delta < total; delta++) {
+          const fwd = savedPage + delta
+          const bwd = savedPage - delta
+          if (fwd <= total && !seen.has(fwd)) { renderOrder.push(fwd); seen.add(fwd) }
+          if (delta > 0 && bwd >= 1 && !seen.has(bwd)) { renderOrder.push(bwd); seen.add(bwd) }
+          if (seen.size === total) break
+        }
+
+        for (const pageNum of renderOrder) {
           if (cancelled) return
-          const page  = await doc.getPage(i + 1)
+          const i    = pageNum - 1
+          const page = pageObjects[i]
           const scale = pageW / page.getViewport({ scale: 1 }).width
           const vp    = page.getViewport({ scale })
           const cv    = canvases[i]
 
-          cv.width  = Math.floor(vp.width  * dpr)
-          cv.height = Math.floor(vp.height * dpr)
-          cv.style.width  = Math.floor(vp.width)  + 'px'
-          cv.style.height = Math.floor(vp.height) + 'px'
+          cv.width         = Math.floor(vp.width  * dpr)
+          cv.height        = Math.floor(vp.height * dpr)
+          cv.style.width   = Math.floor(vp.width)  + 'px'
+          cv.style.height  = Math.floor(vp.height) + 'px'
 
           const ctx       = cv.getContext('2d')!
           const transform = dpr !== 1
@@ -170,7 +223,7 @@ export default function PdfViewer({ slug, onLoadSuccess, onPageChange }: Props) 
         }
         if (cancelled) return
 
-        // STEP 3 — scroll spy (only after all pages rendered)
+        // STEP 6 — scroll spy (only after all pages rendered)
         io = new IntersectionObserver(entries => {
           let best: IntersectionObserverEntry | null = null
           for (const e of entries)
@@ -296,6 +349,23 @@ export default function PdfViewer({ slug, onLoadSuccess, onPageChange }: Props) 
         >
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
         </button>
+
+        {onToggleText && (
+          <>
+            <Divider />
+            <button
+              style={btnStyle(textMode, extractingText)}
+              onClick={onToggleText}
+              disabled={extractingText}
+              title={textMode ? 'Voltar ao PDF' : 'Ver em texto'}
+            >
+              {extractingText
+                ? <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                : <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="18" y2="18"/></svg>
+              }
+            </button>
+          </>
+        )}
 
       </div>
 

@@ -5,3 +5,5 @@ pydantic
 python-dotenv
 pymupdf
 python-multipart
+python-jose[cryptography]
+google-auth

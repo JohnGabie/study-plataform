@@ -1,54 +1,49 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 from app.models.progress import DailyProgress
 from datetime import date, timedelta
 
 
-def get_or_create_today(db: Session) -> DailyProgress:
+def get_or_create_today(db: Session, user_id: str) -> DailyProgress:
     today = date.today()
-    record = db.query(DailyProgress).filter(DailyProgress.date == today).first()
+    record = db.query(DailyProgress).filter(
+        DailyProgress.user_id == user_id,
+        DailyProgress.date == today,
+    ).first()
     if not record:
-        record = DailyProgress(date=today)
+        record = DailyProgress(user_id=user_id, date=today)
         db.add(record)
         db.commit()
         db.refresh(record)
     return record
 
 
-def record_attempt(db: Session, completed: bool):
-    record = get_or_create_today(db)
+def record_attempt(db: Session, user_id: str, completed: bool):
+    record = get_or_create_today(db, user_id)
     record.exercises_attempted += 1
     if completed:
         record.exercises_completed += 1
     db.commit()
 
 
-def get_summary(db: Session, days: int = 7) -> dict:
+def get_summary(db: Session, user_id: str, days: int = 7) -> dict:
     today = date.today()
     since = today - timedelta(days=days - 1)
 
     rows = (
         db.query(DailyProgress)
-        .filter(DailyProgress.date >= since)
+        .filter(DailyProgress.user_id == user_id, DailyProgress.date >= since)
         .order_by(DailyProgress.date.asc())
         .all()
     )
 
     daily = [
-        {
-            "date": str(r.date),
-            "completed": r.exercises_completed,
-            "attempted": r.exercises_attempted,
-        }
+        {"date": str(r.date), "completed": r.exercises_completed, "attempted": r.exercises_attempted}
         for r in rows
     ]
 
     completed_last_7 = sum(r.exercises_completed for r in rows)
-
     cutoff_3 = today - timedelta(days=2)
-    completed_last_3 = sum(
-        r.exercises_completed for r in rows if r.date >= cutoff_3
-    )
+    completed_last_3 = sum(r.exercises_completed for r in rows if r.date >= cutoff_3)
 
     streak = 0
     for i in range(days):

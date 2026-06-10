@@ -14,6 +14,7 @@ interface BookDetail {
   content_type: 'markdown' | 'pdf'
   content: string | null
   cover_url: string | null
+  has_text: boolean
 }
 
 interface TocEntry {
@@ -123,6 +124,12 @@ export default function BookReaderPage() {
   const handlePdfLoad = useCallback((n: number) => setNumPages(n), [])
   const handlePageChange = useCallback((p: number) => setCurrentPage(p), [])
 
+  // Text mode
+  const [textMode,    setTextMode]    = useState(false)
+  const [textContent, setTextContent] = useState<string | null>(null)
+  const [extracting,  setExtracting]  = useState(false)
+  const [hasText,     setHasText]     = useState(false)
+
   // MD state
   const contentRef = useRef<HTMLDivElement>(null)
   const [toc, setToc] = useState<TocEntry[]>([])
@@ -137,6 +144,7 @@ export default function BookReaderPage() {
         const data: BookDetail = r.data
         setBook(data)
         if (data.content) setToc(extractToc(data.content))
+        setHasText(data.has_text ?? false)
         setLoading(false)
         const prog = loadProgress(slug)
         if (data.content_type === 'pdf' && prog.currentPage) {
@@ -185,6 +193,28 @@ export default function BookReaderPage() {
     if (book?.content_type === 'pdf' && numPages > 0) return Math.round((currentPage / numPages) * 100)
     return p.scrollPercent ?? 0
   })()
+
+  // ── Text mode toggle ──────────────────────────────────────────────────────
+  const handleToggleText = async () => {
+    if (textMode) { setTextMode(false); return }
+    if (textContent) { setTextMode(true); return }
+    setExtracting(true)
+    try {
+      if (hasText) {
+        const r = await api.get(`/books/${slug}/text`)
+        setTextContent(r.data.content)
+      } else {
+        const r = await api.post(`/books/${slug}/extract-text`, {}, { timeout: 120_000 })
+        setTextContent(r.data.content)
+        setHasText(true)
+      }
+      setTextMode(true)
+    } catch {
+      // extraction failed — stay in PDF mode
+    } finally {
+      setExtracting(false)
+    }
+  }
 
   // ── Render states ──────────────────────────────────────────────────────────
   if (loading) {
@@ -254,7 +284,7 @@ export default function BookReaderPage() {
           </span>
         )}
 
-        {book.content_type === 'pdf' && numPages > 0 && (
+        {book.content_type !== 'markdown' && numPages > 0 && (
           <span style={{ fontSize: 11, color: 'var(--muted)', fontFamily: 'var(--f-mono)', flexShrink: 0 }}>
             {currentPage} / {numPages}
           </span>
@@ -283,12 +313,23 @@ export default function BookReaderPage() {
               <ReactMarkdown components={MD_COMPONENTS as any}>{book.content ?? ''}</ReactMarkdown>
             </div>
           </div>
+        ) : textMode && textContent ? (
+          <div
+            style={{ flex: 1, overflowY: 'auto', padding: '36px 52px 80px' }}
+          >
+            <div style={{ maxWidth: 720, margin: '0 auto' }}>
+              <ReactMarkdown components={MD_COMPONENTS as any}>{textContent}</ReactMarkdown>
+            </div>
+          </div>
         ) : (
           <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
             <PdfViewer
               slug={slug}
               onLoadSuccess={handlePdfLoad}
               onPageChange={handlePageChange}
+              onToggleText={handleToggleText}
+              textMode={textMode}
+              extractingText={extracting}
             />
           </div>
         )}

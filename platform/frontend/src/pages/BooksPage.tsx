@@ -70,34 +70,111 @@ function FilterTab({ label, count, active, color, onClick }: {
 }
 
 // ── BookCard ──────────────────────────────────────────────────────────────────
-function BookCard({ book, onClick }: { book: Book; onClick: () => void }) {
+function BookCard({ book, onClick, onDelete }: { book: Book; onClick: () => void; onDelete: () => void }) {
   const [hovered, setHovered] = useState(false)
+  const [confirming, setConfirming] = useState(false)
   const phase = book.phase != null ? PHASE_CFG[book.phase] : null
   const phaseColor = phase?.color ?? 'var(--muted)'
 
+  const handleDeleteClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setConfirming(true)
+  }
+
+  const handleConfirm = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    onDelete()
+  }
+
+  const handleCancel = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setConfirming(false)
+  }
+
   return (
     <div
-      onClick={onClick}
+      onClick={confirming ? undefined : onClick}
       onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      onMouseLeave={() => { setHovered(false); setConfirming(false) }}
       style={{
         position: 'relative', display: 'flex', flexDirection: 'column',
         background: 'var(--bg-card)',
-        border: `1px solid ${hovered ? 'var(--border-lit)' : 'var(--border)'}`,
+        border: `1px solid ${confirming ? 'rgba(248,81,73,0.4)' : hovered ? 'var(--border-lit)' : 'var(--border)'}`,
         borderRadius: 8, overflow: 'hidden',
-        cursor: 'pointer',
-        transform: hovered ? 'translateY(-2px)' : 'translateY(0)',
+        cursor: confirming ? 'default' : 'pointer',
+        transform: hovered && !confirming ? 'translateY(-2px)' : 'translateY(0)',
         transition: 'border-color 130ms, transform 150ms, box-shadow 130ms',
-        boxShadow: hovered ? '0 4px 16px rgba(0,0,0,0.3)' : 'none',
-        height: book.cover_url ? 220 : 148,
+        boxShadow: hovered && !confirming ? '0 4px 16px rgba(0,0,0,0.3)' : 'none',
+        height: book.cover_url ? 400 : 148,
       }}
     >
       {/* Phase spine */}
       <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: phaseColor, opacity: 0.9 }} />
 
+      {/* Confirmation overlay */}
+      {confirming && (
+        <div
+          onClick={e => e.stopPropagation()}
+          style={{
+            position: 'absolute', inset: 0, zIndex: 10,
+            background: 'rgba(11,15,20,0.88)',
+            display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center', gap: 12,
+          }}
+        >
+          <p style={{ fontSize: 12, color: 'var(--text)', margin: 0, fontWeight: 600 }}>Deletar livro?</p>
+          <p style={{ fontSize: 10, color: 'var(--muted)', margin: 0, textAlign: 'center', maxWidth: 160, lineHeight: 1.5 }}>
+            Arquivo e capa serão removidos permanentemente.
+          </p>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={handleCancel}
+              style={{
+                padding: '5px 14px', borderRadius: 5, fontSize: 11, cursor: 'pointer',
+                background: 'transparent', border: '1px solid var(--border)',
+                color: 'var(--muted)',
+              }}
+            >
+              cancelar
+            </button>
+            <button
+              onClick={handleConfirm}
+              style={{
+                padding: '5px 14px', borderRadius: 5, fontSize: 11, cursor: 'pointer',
+                background: 'rgba(248,81,73,0.15)', border: '1px solid rgba(248,81,73,0.4)',
+                color: '#f85149', fontWeight: 700,
+              }}
+            >
+              deletar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Delete button — visible on hover */}
+      {!confirming && (
+        <button
+          onClick={handleDeleteClick}
+          style={{
+            position: 'absolute', top: 8, right: 8, zIndex: 2,
+            width: 26, height: 26, padding: 0, borderRadius: 5,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: hovered ? 'rgba(248,81,73,0.12)' : 'transparent',
+            border: `1px solid ${hovered ? 'rgba(248,81,73,0.35)' : 'transparent'}`,
+            color: hovered ? '#f85149' : 'transparent',
+            cursor: 'pointer', transition: 'all 130ms',
+          }}
+          title="Deletar livro"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/>
+          </svg>
+        </button>
+      )}
+
       {/* Cover image */}
       {book.cover_url && (
-        <div style={{ height: 100, overflow: 'hidden', flexShrink: 0, marginLeft: 3 }}>
+        <div style={{ height: 280, overflow: 'hidden', flexShrink: 0, marginLeft: 3 }}>
           <img src={book.cover_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
         </div>
       )}
@@ -174,6 +251,12 @@ export default function BooksPage() {
     api.get('/books').then(r => {
       setBooks(withProgress(r.data as Omit<Book, 'progress'>[]))
     }).catch(() => {})
+  }, [])
+
+  const handleDelete = useCallback((slug: string) => {
+    api.delete(`/books/${slug}`)
+      .then(() => setBooks(prev => prev.filter(b => b.slug !== slug)))
+      .catch(() => {})
   }, [])
 
   useEffect(() => { fetchBooks() }, [fetchBooks])
@@ -265,7 +348,12 @@ export default function BooksPage() {
               style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10, animationDelay: '80ms', opacity: 0 }}
             >
               {filtered.map(book => (
-                <BookCard key={book.slug} book={book} onClick={() => navigate(`/books/${book.slug}`)} />
+                <BookCard
+                  key={book.slug}
+                  book={book}
+                  onClick={() => navigate(`/books/${book.slug}`)}
+                  onDelete={() => handleDelete(book.slug)}
+                />
               ))}
             </div>
           </>

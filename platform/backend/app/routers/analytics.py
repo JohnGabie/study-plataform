@@ -2,27 +2,23 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
+from app.dependencies import get_current_user
 from app.models.submission import Submission
 from app.models.exercise import Exercise
+from app.models.user import User
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 
 @router.get("/performance")
-def get_performance(db: Session = Depends(get_db)):
-    """
-    Returns per-concept performance aggregated across all submissions.
-    Used by the daily agent to calibrate next exercise batch.
-
-    Response shape:
-    {
-      "http:status-codes": {"attempted": 5, "passed": 3, "rate": 0.6},
-      ...
-    }
-    """
+def get_performance(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     rows = (
         db.query(Submission, Exercise)
         .join(Exercise, Submission.exercise_id == Exercise.id)
+        .filter(Submission.user_id == current_user.id)
         .all()
     )
 
@@ -32,7 +28,6 @@ def get_performance(db: Session = Depends(get_db)):
         concepts = exercise.concepts or []
         if not concepts:
             concepts = ["uncategorized"]
-
         for concept in concepts:
             if concept not in perf:
                 perf[concept] = {"attempted": 0, "passed": 0}

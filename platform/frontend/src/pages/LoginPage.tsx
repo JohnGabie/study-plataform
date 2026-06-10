@@ -22,8 +22,17 @@ export default function LoginPage() {
 
   const handleGoogle = async (credential: string) => {
     setError('')
-    try { await loginGoogle(credential); navigate('/') }
-    catch { setError('Erro ao autenticar com Google.') }
+    setLoading(true)
+    try {
+      await loginGoogle(credential)
+      navigate('/')
+    } catch (e: unknown) {
+      console.error('[login] google error:', e)
+      const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      setError(msg || 'Erro ao autenticar com Google.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -121,8 +130,13 @@ export default function LoginPage() {
             </div>
           )}
 
+          {loading && (
+            <p className="f-mono" style={{ fontSize: 11, color: 'var(--muted)', textAlign: 'center', marginTop: 12 }}>
+              autenticando...
+            </p>
+          )}
           {error && (
-            <p className="f-mono" style={{ fontSize: 11, color: 'var(--red)', textAlign: 'center', marginTop: 12 }}>
+            <p className="f-mono" style={{ fontSize: 11, color: '#f85149', textAlign: 'center', marginTop: 12 }}>
               {error}
             </p>
           )}

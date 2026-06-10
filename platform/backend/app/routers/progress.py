@@ -4,23 +4,32 @@ from sqlalchemy import func
 from typing import Optional
 
 from app.db.database import get_db
+from app.dependencies import get_current_user
+from app.models.submission import Submission
+from app.models.exercise import Exercise
+from app.models.user import User
 from app.services.progress_service import get_summary
 
 router = APIRouter(prefix="/progress", tags=["progress"])
 
 
 @router.get("/summary")
-def progress_summary(days: int = Query(default=7, ge=1, le=90), db: Session = Depends(get_db)):
-    return get_summary(db, days=days)
+def progress_summary(
+    days: int = Query(default=7, ge=1, le=90),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return get_summary(db, user_id=current_user.id, days=days)
 
 
 @router.get("/resume")
-def progress_resume(db: Session = Depends(get_db)) -> Optional[dict]:
-    from app.models.submission import Submission
-    from app.models.exercise import Exercise
-
+def progress_resume(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Optional[dict]:
     last_sub = (
         db.query(Submission)
+        .filter(Submission.user_id == current_user.id)
         .order_by(Submission.submitted_at.desc())
         .first()
     )
@@ -33,7 +42,11 @@ def progress_resume(db: Session = Depends(get_db)) -> Optional[dict]:
 
     already_passed = (
         db.query(Submission)
-        .filter(Submission.exercise_id == exercise.id, Submission.status == "passed")
+        .filter(
+            Submission.user_id == current_user.id,
+            Submission.exercise_id == exercise.id,
+            Submission.status == "passed",
+        )
         .first()
     )
     if already_passed:
@@ -55,15 +68,17 @@ def progress_resume(db: Session = Depends(get_db)) -> Optional[dict]:
 
 
 @router.get("/recent-exercises")
-def recent_exercises(limit: int = Query(default=20, ge=1, le=50), db: Session = Depends(get_db)):
-    from app.models.submission import Submission
-    from app.models.exercise import Exercise
-
+def recent_exercises(
+    limit: int = Query(default=20, ge=1, le=50),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     subq = (
         db.query(
             Submission.exercise_id,
             func.max(Submission.submitted_at).label("latest_at"),
         )
+        .filter(Submission.user_id == current_user.id)
         .group_by(Submission.exercise_id)
         .subquery()
     )
@@ -82,7 +97,11 @@ def recent_exercises(limit: int = Query(default=20, ge=1, le=50), db: Session = 
     for sub, ex in rows:
         ever_passed = (
             db.query(Submission)
-            .filter(Submission.exercise_id == ex.id, Submission.status == "passed")
+            .filter(
+                Submission.user_id == current_user.id,
+                Submission.exercise_id == ex.id,
+                Submission.status == "passed",
+            )
             .first()
         )
         result.append({

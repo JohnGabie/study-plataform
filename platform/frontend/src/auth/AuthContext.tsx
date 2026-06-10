@@ -16,19 +16,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(false)
   }, [])
 
-  const save = (u: User) => { setUser(u); localStorage.setItem('user', JSON.stringify(u)) }
+  const save = (token: string, u: User) => {
+    localStorage.setItem('token', token)
+    localStorage.setItem('user', JSON.stringify(u))
+    setUser(u)
+  }
 
   const loginDev = async () => {
     const { data } = await api.post('/auth/dev')
-    save(data)
+    save(data.token, data.user)
   }
 
   const loginGoogle = async (credential: string) => {
     const { data } = await api.post('/auth/google', { credential })
-    save(data)
+    save(data.token, data.user)
   }
 
-  const logout = () => { setUser(null); localStorage.removeItem('user') }
+  const logout = () => {
+    setUser(null)
+    localStorage.removeItem('token')
+    localStorage.removeItem('user')
+  }
 
   return <AuthContext.Provider value={{ user, loading, loginDev, loginGoogle, logout }}>{children}</AuthContext.Provider>
 }

@@ -13,6 +13,8 @@ import app.models  # noqa: F401
 # Create upload dirs before StaticFiles is mounted (it checks for existence)
 os.makedirs("app/uploads/books", exist_ok=True)
 os.makedirs("app/uploads/covers", exist_ok=True)
+os.makedirs("app/uploads/texts", exist_ok=True)
+os.makedirs("app/uploads/book-imgs", exist_ok=True)
 
 
 @asynccontextmanager
@@ -51,6 +53,7 @@ app.include_router(agent.router)
 app.include_router(books.router)
 
 app.mount("/covers", StaticFiles(directory="app/uploads/covers"), name="covers")
+app.mount("/book-imgs", StaticFiles(directory="app/uploads/book-imgs"), name="book-imgs")
 
 
 @app.get("/")

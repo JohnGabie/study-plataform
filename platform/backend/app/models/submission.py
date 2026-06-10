@@ -9,6 +9,7 @@ class Submission(Base):
     __tablename__ = "submissions"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String, ForeignKey("users.id"), nullable=True)
     exercise_id = Column(String, ForeignKey("exercises.id"), nullable=False)
     code = Column(Text, nullable=False)
     status = Column(String(20), nullable=False)  # passed | failed | partial
