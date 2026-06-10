@@ -90,6 +90,21 @@ def run_migrations(engine):
             conn.execute(text("ALTER TABLE books ADD COLUMN text_path TEXT"))
             conn.commit()
 
+        # personal_tokens
+        tables = {row[0] for row in conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))}
+        if "personal_tokens" not in tables:
+            conn.execute(text("""
+                CREATE TABLE personal_tokens (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    token_hash TEXT NOT NULL UNIQUE,
+                    name TEXT NOT NULL DEFAULT 'Claude Code',
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    last_used_at DATETIME
+                )
+            """))
+            conn.commit()
+
 
 def get_db():
     db = SessionLocal()

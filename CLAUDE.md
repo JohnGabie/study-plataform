@@ -7,11 +7,13 @@
 
 ## BOOT SEQUENCE — Execute sempre ao iniciar uma sessão
 
+> Os arquivos de planejamento vivem no vault Obsidian em `vault-obsidian/`.
+
 ```
-1. Read STATE.md          → o que existe vs o que não existe
-2. Read TASKS.md          → o que está pendente e o que está bloqueado
-3. Read DECISIONS.md      → por que as coisas foram feitas assim
-4. Read agent/AGENT.md    → estado do agente diário
+1. Read vault-obsidian/STATE.md      → o que existe vs o que não existe
+2. Read vault-obsidian/TASKS.md      → o que está pendente e o que está bloqueado
+3. Read vault-obsidian/DECISIONS.md  → por que as coisas foram feitas assim
+4. Read agent/AGENT.md               → estado do agente diário
 ```
 
 Se STATE.md disser que uma feature está "done", verifique se o arquivo/diretório
