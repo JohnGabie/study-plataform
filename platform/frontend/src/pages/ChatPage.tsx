@@ -1,5 +1,14 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import api from '../api/client'
+
+function getAiConfig() {
+  return {
+    api_key:  localStorage.getItem('study_ai_key')      ?? '',
+    base_url: localStorage.getItem('study_ai_base_url') ?? 'https://openrouter.ai/api/v1',
+    model:    localStorage.getItem('study_ai_model')    ?? 'anthropic/claude-opus-4-5',
+  }
+}
 
 interface Message {
   id: string
@@ -223,6 +232,8 @@ function MessageBubble({ msg, isNew }: { msg: Message; isNew?: boolean }) {
 
 // ── Página principal ──────────────────────────────────────────────────────────
 export default function ChatPage() {
+  const navigate = useNavigate()
+  const [aiConfig, setAiConfig] = useState(getAiConfig)
   const [convs, setConvs] = useState<Conversation[]>(MOCK)
   const [activeId, setActiveId] = useState<string>(MOCK[0].id)
   const [input, setInput] = useState('')
@@ -230,6 +241,13 @@ export default function ChatPage() {
   const [newMsgIds, setNewMsgIds] = useState<Set<string>>(new Set())
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+
+  // Re-read config when window gets focus (user may have just set it in /config)
+  useEffect(() => {
+    const refresh = () => setAiConfig(getAiConfig())
+    window.addEventListener('focus', refresh)
+    return () => window.removeEventListener('focus', refresh)
+  }, [])
 
   const active = convs.find(c => c.id === activeId) ?? convs[0]
 
@@ -265,17 +283,26 @@ export default function ChatPage() {
 
     setSending(true)
     try {
-      const { data } = await api.post('/chat', { message: text, context: active.context })
+      const cfg = getAiConfig()
+      const history = active.messages.map(m => ({ role: m.role, content: m.content }))
+      const { data } = await api.post('/chat', {
+        message: text,
+        history,
+        api_key:  cfg.api_key,
+        base_url: cfg.base_url,
+        model:    cfg.model,
+      })
       const aiMsg: Message = { id: mkId(), role: 'assistant', content: data.response, timestamp: new Date().toISOString() }
       setNewMsgIds(s => new Set(s).add(aiMsg.id))
       setConvs(prev => prev.map(c => c.id === activeId
         ? { ...c, messages: [...c.messages, aiMsg], updated_at: new Date().toISOString() }
         : c
       ))
-    } catch {
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail ?? 'Erro desconhecido.'
       const errMsg: Message = {
         id: mkId(), role: 'assistant',
-        content: '⚠ Chat não configurado ainda. Adicione `ANTHROPIC_API_KEY` ao backend para ativar.',
+        content: `⚠ ${detail}`,
         timestamp: new Date().toISOString(),
       }
       setNewMsgIds(s => new Set(s).add(errMsg.id))
@@ -422,21 +449,62 @@ export default function ChatPage() {
             {active.messages.length === 0 && !sending && (
               <div style={{
                 margin: 'auto', textAlign: 'center',
-                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12,
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14,
               }}>
-                <div style={{
-                  width: 48, height: 48, borderRadius: '50%',
-                  background: 'var(--cyan-faint)', border: '1px solid var(--cyan-glow)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: 'var(--cyan)',
-                }}>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                  </svg>
-                </div>
-                <p style={{ margin: 0, fontSize: 13, color: 'var(--muted)', lineHeight: 1.6 }}>
-                  faça uma pergunta para começar
-                </p>
+                {!aiConfig.api_key ? (
+                  <>
+                    <div style={{
+                      width: 48, height: 48, borderRadius: '50%',
+                      background: 'rgba(113,113,113,0.08)', border: '1px solid var(--border)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: 'var(--muted)',
+                    }}>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p style={{ margin: '0 0 6px', fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
+                        IA não configurada
+                      </p>
+                      <p style={{ margin: '0 0 14px', fontSize: 11, color: 'var(--muted)', lineHeight: 1.6 }}>
+                        Adicione uma API key em Configurações para usar o chat.
+                      </p>
+                      <button
+                        onClick={() => navigate('/config')}
+                        style={{
+                          fontSize: 12, padding: '7px 18px', borderRadius: 6, cursor: 'pointer',
+                          background: 'rgba(34,211,238,0.08)', border: '1px solid rgba(34,211,238,0.25)',
+                          color: 'var(--cyan)',
+                        }}
+                      >
+                        Ir para Configurações →
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{
+                      width: 48, height: 48, borderRadius: '50%',
+                      background: 'var(--cyan-faint)', border: '1px solid var(--cyan-glow)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: 'var(--cyan)',
+                    }}>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p style={{ margin: '0 0 4px', fontSize: 13, color: 'var(--muted)' }}>
+                        faça uma pergunta para começar
+                      </p>
+                      <p style={{ margin: 0, fontSize: 10, color: 'var(--muted)', opacity: 0.5, fontFamily: 'var(--f-mono)' }}>
+                        {aiConfig.model} · {aiConfig.base_url.replace('https://', '').split('/')[0]}
+                      </p>
+                    </div>
+                  </>
+                )}
               </div>
             )}
 
@@ -478,26 +546,28 @@ export default function ChatPage() {
               <input
                 ref={inputRef}
                 type="text"
-                placeholder="pergunte algo..."
+                placeholder={aiConfig.api_key ? 'pergunte algo...' : 'configure a IA em Configurações para usar o chat'}
                 value={input}
+                disabled={!aiConfig.api_key}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
                 style={{
                   flex: 1, height: 28, padding: 0,
                   background: 'transparent', border: 'none',
-                  color: 'var(--text)', fontSize: 13,
-                  fontFamily: 'var(--f-mono)', outline: 'none',
+                  color: aiConfig.api_key ? 'var(--text)' : 'var(--muted)',
+                  fontSize: 13, fontFamily: 'var(--f-mono)', outline: 'none',
+                  cursor: aiConfig.api_key ? 'text' : 'not-allowed',
                 }}
               />
               <button
                 onClick={send}
-                disabled={!input.trim() || sending}
+                disabled={!input.trim() || sending || !aiConfig.api_key}
                 style={{
                   width: 32, height: 32, borderRadius: 7, flexShrink: 0,
-                  background: input.trim() && !sending ? 'rgba(34,211,238,0.12)' : 'transparent',
-                  border: `1px solid ${input.trim() && !sending ? 'rgba(34,211,238,0.3)' : 'transparent'}`,
-                  cursor: input.trim() && !sending ? 'pointer' : 'not-allowed',
-                  color: input.trim() && !sending ? 'var(--cyan)' : 'var(--muted)',
+                  background: input.trim() && !sending && aiConfig.api_key ? 'rgba(34,211,238,0.12)' : 'transparent',
+                  border: `1px solid ${input.trim() && !sending && aiConfig.api_key ? 'rgba(34,211,238,0.3)' : 'transparent'}`,
+                  cursor: input.trim() && !sending && aiConfig.api_key ? 'pointer' : 'not-allowed',
+                  color: input.trim() && !sending && aiConfig.api_key ? 'var(--cyan)' : 'var(--muted)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   transition: 'all 150ms',
                 }}
@@ -508,9 +578,16 @@ export default function ChatPage() {
                 </svg>
               </button>
             </div>
-            <p style={{ margin: '6px 0 0', fontSize: 9, color: 'var(--muted)', fontFamily: 'var(--f-mono)', opacity: 0.5 }}>
-              Enter para enviar · Shift+Enter para nova linha
-            </p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
+              <p style={{ margin: 0, fontSize: 9, color: 'var(--muted)', fontFamily: 'var(--f-mono)', opacity: 0.5 }}>
+                {aiConfig.api_key ? 'Enter para enviar · Shift+Enter para nova linha' : ''}
+              </p>
+              {aiConfig.api_key && (
+                <p style={{ margin: 0, fontSize: 9, color: 'var(--muted)', fontFamily: 'var(--f-mono)', opacity: 0.4 }}>
+                  {aiConfig.model}
+                </p>
+              )}
+            </div>
           </div>
         </div>
       </div>

@@ -384,6 +384,178 @@ function IntegracoesSection() {
   )
 }
 
+// ── IA ────────────────────────────────────────────────────────────────────────
+
+const PRESETS = [
+  { label: 'OpenRouter', url: 'https://openrouter.ai/api/v1', hint: 'acesso a centenas de modelos' },
+  { label: 'OpenAI',     url: 'https://api.openai.com/v1',    hint: 'GPT-4o, o1, etc.' },
+  { label: 'Groq',       url: 'https://api.groq.com/openai/v1', hint: 'rápido e gratuito' },
+  { label: 'Mistral',    url: 'https://api.mistral.ai/v1',    hint: '' },
+  { label: 'Together',   url: 'https://api.together.xyz/v1',  hint: 'open-source models' },
+]
+
+const MODEL_HINTS: Record<string, string[]> = {
+  'https://openrouter.ai/api/v1': [
+    'anthropic/claude-opus-4-5',
+    'anthropic/claude-sonnet-4-5',
+    'openai/gpt-4o',
+    'google/gemini-2.0-flash-001',
+    'meta-llama/llama-3.3-70b-instruct',
+  ],
+  'https://api.openai.com/v1': ['gpt-4o', 'gpt-4o-mini', 'o3-mini'],
+  'https://api.groq.com/openai/v1': ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768'],
+  'https://api.mistral.ai/v1': ['mistral-large-latest', 'mistral-small-latest'],
+  'https://api.together.xyz/v1': ['meta-llama/Llama-3-70b-chat-hf', 'mistralai/Mixtral-8x22B-Instruct-v0.1'],
+}
+
+function IASection() {
+  const [key, setKey]       = useState(() => ls('study_ai_key', ''))
+  const [url, setUrl]       = useState(() => ls('study_ai_base_url', 'https://openrouter.ai/api/v1'))
+  const [model, setModel]   = useState(() => ls('study_ai_model', 'anthropic/claude-opus-4-5'))
+  const [showKey, setShowKey] = useState(false)
+  const [saved, setSaved]   = useState(false)
+  const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function save(k = key, u = url, m = model) {
+    lsSet('study_ai_key', k)
+    lsSet('study_ai_base_url', u)
+    lsSet('study_ai_model', m)
+    setSaved(true)
+    if (savedTimer.current) clearTimeout(savedTimer.current)
+    savedTimer.current = setTimeout(() => setSaved(false), 1800)
+  }
+
+  function pickPreset(u: string) {
+    const hints = MODEL_HINTS[u] ?? []
+    const newModel = hints[0] ?? model
+    setUrl(u); setModel(newModel)
+    save(key, u, newModel)
+  }
+
+  const hints = MODEL_HINTS[url] ?? []
+  const configured = Boolean(key.trim())
+
+  return (
+    <Group label="IA — Chat">
+
+      {/* Status row */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '14px 20px', borderBottom: '1px solid var(--border)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{
+            width: 7, height: 7, borderRadius: '50%',
+            background: configured ? 'var(--cyan)' : 'var(--faint)',
+            boxShadow: configured ? '0 0 5px var(--cyan)' : 'none',
+          }} />
+          <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
+            {configured ? `${url.replace('https://', '').split('/')[0]} · ${model}` : 'não configurado'}
+          </p>
+        </div>
+        {saved && (
+          <span style={{ fontSize: 11, color: 'var(--cyan)', fontFamily: 'var(--f-mono)' }}>✓ salvo</span>
+        )}
+      </div>
+
+      {/* Provider presets */}
+      <Row label="Provedor" description="Use OpenRouter para acessar qualquer modelo com uma única chave.">
+        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          {PRESETS.map(p => (
+            <button
+              key={p.url}
+              onClick={() => pickPreset(p.url)}
+              title={p.hint}
+              style={{
+                padding: '5px 10px', borderRadius: 5, fontSize: 11,
+                cursor: 'pointer', fontFamily: 'var(--f-mono)', transition: 'all 130ms',
+                background: url === p.url ? 'rgba(34,211,238,0.1)' : 'var(--bg)',
+                border: `1px solid ${url === p.url ? 'rgba(34,211,238,0.4)' : 'var(--border)'}`,
+                color: url === p.url ? 'var(--cyan)' : 'var(--muted)',
+              }}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </Row>
+
+      {/* Custom base URL */}
+      <Row label="Base URL" description="Qualquer endpoint OpenAI-compatible.">
+        <input
+          value={url}
+          onChange={e => setUrl(e.target.value)}
+          onBlur={() => save()}
+          style={{
+            width: 300, background: 'var(--bg)', border: '1px solid var(--border)',
+            borderRadius: 5, padding: '6px 10px', fontSize: 11, outline: 'none',
+            color: 'var(--text)', fontFamily: 'var(--f-mono)',
+          }}
+          onFocus={e => e.currentTarget.style.borderColor = 'rgba(34,211,238,0.4)'}
+        />
+      </Row>
+
+      {/* API Key */}
+      <Row label="API Key" description="Armazenada somente no browser, nunca enviada ao servidor.">
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <input
+            type={showKey ? 'text' : 'password'}
+            value={key}
+            onChange={e => setKey(e.target.value)}
+            onBlur={() => save()}
+            placeholder="sk-..."
+            style={{
+              width: 260, background: 'var(--bg)', border: '1px solid var(--border)',
+              borderRadius: 5, padding: '6px 10px', fontSize: 11, outline: 'none',
+              color: 'var(--text)', fontFamily: 'var(--f-mono)',
+            }}
+            onFocus={e => e.currentTarget.style.borderColor = 'rgba(34,211,238,0.4)'}
+          />
+          <button onClick={() => setShowKey(v => !v)} style={btnGhost}>
+            {showKey ? 'ocultar' : 'mostrar'}
+          </button>
+        </div>
+      </Row>
+
+      {/* Model */}
+      <Row label="Modelo" description="Nome exato do modelo conforme a API do provedor." last>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
+          <input
+            value={model}
+            onChange={e => setModel(e.target.value)}
+            onBlur={() => save()}
+            style={{
+              width: 300, background: 'var(--bg)', border: '1px solid var(--border)',
+              borderRadius: 5, padding: '6px 10px', fontSize: 11, outline: 'none',
+              color: 'var(--text)', fontFamily: 'var(--f-mono)',
+            }}
+            onFocus={e => e.currentTarget.style.borderColor = 'rgba(34,211,238,0.4)'}
+          />
+          {hints.length > 0 && (
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              {hints.map(h => (
+                <button
+                  key={h}
+                  onClick={() => { setModel(h); save(key, url, h) }}
+                  style={{
+                    padding: '3px 8px', borderRadius: 4, fontSize: 10,
+                    cursor: 'pointer', fontFamily: 'var(--f-mono)', transition: 'all 130ms',
+                    background: model === h ? 'rgba(34,211,238,0.08)' : 'transparent',
+                    border: `1px solid ${model === h ? 'rgba(34,211,238,0.3)' : 'var(--border)'}`,
+                    color: model === h ? 'var(--cyan)' : 'var(--muted)',
+                  }}
+                >
+                  {h.split('/').pop()}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </Row>
+    </Group>
+  )
+}
+
 // ── Aprendizado ───────────────────────────────────────────────────────────────
 
 const DIFF_OPTIONS = [
@@ -475,6 +647,7 @@ export default function ConfigPage() {
           Configurações
         </h1>
         <ContaSection />
+        <IASection />
         <IntegracoesSection />
         <AprendizadoSection />
       </div>
