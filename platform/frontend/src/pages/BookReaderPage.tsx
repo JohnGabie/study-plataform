@@ -74,6 +74,24 @@ const MD_COMPONENTS = {
   td: ({ children, ...p }: any) => <td style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', color: 'var(--text)' }} {...p}>{children}</td>,
   hr: () => <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '28px 0' }} />,
   strong: ({ children, ...p }: any) => <strong style={{ color: 'var(--text)', fontWeight: 700 }} {...p}>{children}</strong>,
+  img: ({ src, alt, ...p }: any) => {
+    const align = typeof alt === 'string' && alt.startsWith('align:')
+      ? alt.replace('align:', '') as 'left' | 'right' | 'center'
+      : 'center'
+    return (
+      <img
+        src={src}
+        alt=""
+        style={{
+          maxWidth: align === 'center' ? '100%' : '48%',
+          display: 'block',
+          margin: align === 'left' ? '8px auto 8px 0' : align === 'right' ? '8px 0 8px auto' : '12px auto',
+          borderRadius: 4,
+        }}
+        {...p}
+      />
+    )
+  },
 }
 
 // ── TOC sidebar ───────────────────────────────────────────────────────────────
@@ -125,10 +143,14 @@ export default function BookReaderPage() {
   const handlePageChange = useCallback((p: number) => setCurrentPage(p), [])
 
   // Text mode
-  const [textMode,    setTextMode]    = useState(false)
-  const [textContent, setTextContent] = useState<string | null>(null)
-  const [extracting,  setExtracting]  = useState(false)
-  const [hasText,     setHasText]     = useState(false)
+  const [textMode,       setTextMode]       = useState(false)
+  const [extracting,     setExtracting]     = useState(false)
+  const [extractProgress, setExtractProgress] = useState(0)
+  const [hasText,        setHasText]        = useState(false)
+  const [textTotalPages, setTextTotalPages] = useState(0)
+  const [textNavPage,    setTextNavPage]    = useState(1)
+  const textCacheRef = useRef<Map<number, string>>(new Map())
+  const [, setTextCacheVer] = useState(0) // bump to force re-render on cache updates
 
   // MD state
   const contentRef = useRef<HTMLDivElement>(null)
@@ -186,6 +208,22 @@ export default function BookReaderPage() {
     saveProgress(slug, { currentPage, totalPages: numPages, scrollPercent: Math.round((currentPage / numPages) * 100) })
   }, [currentPage, numPages, slug, book])
 
+  // Simulated extraction progress (no real backend progress available)
+  useEffect(() => {
+    if (!extracting) { setExtractProgress(0); return }
+    setExtractProgress(3)
+    const id = setInterval(() => {
+      setExtractProgress(p => {
+        if (p < 30) return p + 4
+        if (p < 60) return p + 1.8
+        if (p < 80) return p + 0.7
+        if (p < 90) return p + 0.2
+        return p
+      })
+    }, 200)
+    return () => clearInterval(id)
+  }, [extracting])
+
   const phaseColor = book?.phase != null ? (PHASE_COLOR[book.phase] ?? 'var(--cyan)') : 'var(--cyan)'
   const phaseLabel = book?.phase != null ? (PHASE_LABEL[book.phase] ?? '') : ''
   const progressPct = (() => {
@@ -194,26 +232,64 @@ export default function BookReaderPage() {
     return p.scrollPercent ?? 0
   })()
 
+  // ── Per-page text helpers ─────────────────────────────────────────────────
+  const fetchTextPage = useCallback(async (page: number) => {
+    if (textCacheRef.current.has(page)) return
+    try {
+      const r = await api.get(`/books/${slug}/text`, { params: { page } })
+      textCacheRef.current.set(page, r.data.text)
+      setTextCacheVer(v => v + 1)
+    } catch {
+      textCacheRef.current.set(page, '*[Erro ao carregar página]*')
+      setTextCacheVer(v => v + 1)
+    }
+  }, [slug])
+
+  // When in text mode and current PDF page changes, sync text view
+  useEffect(() => {
+    if (!textMode) return
+    setTextNavPage(currentPage)
+    fetchTextPage(currentPage)
+  }, [currentPage, textMode, fetchTextPage])
+
   // ── Text mode toggle ──────────────────────────────────────────────────────
   const handleToggleText = async () => {
     if (textMode) { setTextMode(false); return }
-    if (textContent) { setTextMode(true); return }
     setExtracting(true)
     try {
-      if (hasText) {
-        const r = await api.get(`/books/${slug}/text`)
-        setTextContent(r.data.content)
-      } else {
+      if (!hasText) {
         const r = await api.post(`/books/${slug}/extract-text`, {}, { timeout: 120_000 })
-        setTextContent(r.data.content)
+        setTextTotalPages(r.data.total_pages)
         setHasText(true)
+      } else if (textTotalPages === 0) {
+        // already extracted but we don't know total yet — fetch page 1 to get total
+        const r = await api.get(`/books/${slug}/text`, { params: { page: 1 } })
+        setTextTotalPages(r.data.total)
       }
+      const page = currentPage
+      setTextNavPage(page)
+      await fetchTextPage(page)
       setTextMode(true)
     } catch {
       // extraction failed — stay in PDF mode
     } finally {
       setExtracting(false)
     }
+  }
+
+  const handleTextPrev = () => {
+    const p = Math.max(1, textNavPage - 1)
+    setTextNavPage(p)
+    setCurrentPage(p)
+    fetchTextPage(p)
+  }
+
+  const handleTextNext = () => {
+    const max = textTotalPages || numPages
+    const p = Math.min(max, textNavPage + 1)
+    setTextNavPage(p)
+    setCurrentPage(p)
+    fetchTextPage(p)
   }
 
   // ── Render states ──────────────────────────────────────────────────────────
@@ -284,9 +360,9 @@ export default function BookReaderPage() {
           </span>
         )}
 
-        {book.content_type !== 'markdown' && numPages > 0 && (
+        {book.content_type !== 'markdown' && (numPages > 0 || (textMode && textTotalPages > 0)) && (
           <span style={{ fontSize: 11, color: 'var(--muted)', fontFamily: 'var(--f-mono)', flexShrink: 0 }}>
-            {currentPage} / {numPages}
+            {textMode ? textNavPage : currentPage} / {textMode ? textTotalPages : numPages}
           </span>
         )}
       </div>
@@ -313,25 +389,134 @@ export default function BookReaderPage() {
               <ReactMarkdown components={MD_COMPONENTS as any}>{book.content ?? ''}</ReactMarkdown>
             </div>
           </div>
-        ) : textMode && textContent ? (
-          <div
-            style={{ flex: 1, overflowY: 'auto', padding: '36px 52px 80px' }}
-          >
-            <div style={{ maxWidth: 720, margin: '0 auto' }}>
-              <ReactMarkdown components={MD_COMPONENTS as any}>{textContent}</ReactMarkdown>
-            </div>
-          </div>
         ) : (
-          <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-            <PdfViewer
-              slug={slug}
-              onLoadSuccess={handlePdfLoad}
-              onPageChange={handlePageChange}
-              onToggleText={handleToggleText}
-              textMode={textMode}
-              extractingText={extracting}
-            />
-          </div>
+          <>
+            {/* PdfViewer stays mounted — hidden in text mode or while extracting */}
+            <div style={{ flex: 1, minHeight: 0, display: (textMode || extracting) ? 'none' : 'flex', flexDirection: 'column' }}>
+              <PdfViewer
+                slug={slug}
+                onLoadSuccess={handlePdfLoad}
+                onPageChange={handlePageChange}
+                onToggleText={handleToggleText}
+                textMode={textMode}
+                extractingText={extracting}
+                targetPage={textNavPage}
+              />
+            </div>
+
+            {/* Extraction loading screen */}
+            {extracting && (
+              <div style={{
+                flex: 1, display: 'flex', flexDirection: 'column',
+                alignItems: 'center', justifyContent: 'center', gap: 28,
+              }}>
+                <div style={{ textAlign: 'center' }}>
+                  <p style={{ margin: '0 0 6px', fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
+                    Extraindo texto
+                  </p>
+                  <p style={{ margin: 0, fontSize: 11, color: 'var(--muted)' }}>
+                    Pode levar até 1 minuto em PDFs grandes
+                  </p>
+                </div>
+
+                <div style={{ width: 300 }}>
+                  <div style={{
+                    display: 'flex', justifyContent: 'space-between',
+                    marginBottom: 8, fontSize: 11, fontFamily: 'var(--f-mono)',
+                    color: 'var(--muted)',
+                  }}>
+                    <span>processando...</span>
+                    <span>{Math.round(extractProgress)}%</span>
+                  </div>
+                  <div style={{ height: 3, background: 'var(--border)', borderRadius: 2, overflow: 'hidden' }}>
+                    <div style={{
+                      height: '100%', borderRadius: 2,
+                      background: 'linear-gradient(90deg, var(--cyan), #7dd3fc)',
+                      width: `${extractProgress}%`,
+                      transition: 'width 200ms linear',
+                    }} />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Text view — shown when textMode is active */}
+            {textMode && (
+              <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                {/* Text page nav bar */}
+                <div style={{
+                  flexShrink: 0, height: 40,
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '0 16px',
+                  borderBottom: '1px solid var(--border)',
+                  background: 'var(--bg-card)',
+                }}>
+                  {/* Back to PDF button */}
+                  <button
+                    onClick={() => setTextMode(false)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 5,
+                      background: 'transparent', border: '1px solid var(--border)',
+                      borderRadius: 5, padding: '3px 10px', cursor: 'pointer',
+                      fontSize: 11, color: 'var(--muted)', transition: 'all 120ms',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.color = 'var(--text)'; e.currentTarget.style.borderColor = 'var(--faint)' }}
+                    onMouseLeave={e => { e.currentTarget.style.color = 'var(--muted)'; e.currentTarget.style.borderColor = 'var(--border)' }}
+                  >
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="15 18 9 12 15 6" />
+                    </svg>
+                    PDF
+                  </button>
+
+                  {/* Page navigation */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <button
+                      onClick={handleTextPrev}
+                      disabled={textNavPage <= 1}
+                      style={{
+                        background: 'none', border: 'none', cursor: textNavPage <= 1 ? 'not-allowed' : 'pointer',
+                        color: textNavPage <= 1 ? 'var(--faint)' : 'var(--muted)', padding: '4px 8px', borderRadius: 4,
+                      }}
+                    >
+                      ←
+                    </button>
+                    <span style={{ fontSize: 11, color: 'var(--muted)', fontFamily: 'var(--f-mono)' }}>
+                      {textNavPage}{textTotalPages > 0 ? ` / ${textTotalPages}` : ''}
+                    </span>
+                    <button
+                      onClick={handleTextNext}
+                      disabled={textTotalPages > 0 && textNavPage >= textTotalPages}
+                      style={{
+                        background: 'none', border: 'none',
+                        cursor: (textTotalPages > 0 && textNavPage >= textTotalPages) ? 'not-allowed' : 'pointer',
+                        color: (textTotalPages > 0 && textNavPage >= textTotalPages) ? 'var(--faint)' : 'var(--muted)',
+                        padding: '4px 8px', borderRadius: 4,
+                      }}
+                    >
+                      →
+                    </button>
+                  </div>
+
+                  {/* Spacer to balance layout */}
+                  <div style={{ width: 60 }} />
+                </div>
+
+                {/* Page content */}
+                <div style={{ flex: 1, overflowY: 'auto', padding: '36px 52px 80px' }}>
+                  <div style={{ maxWidth: 720, margin: '0 auto' }}>
+                    {textCacheRef.current.has(textNavPage) ? (
+                      <ReactMarkdown components={MD_COMPONENTS as any}>
+                        {textCacheRef.current.get(textNavPage)!}
+                      </ReactMarkdown>
+                    ) : (
+                      <p style={{ color: 'var(--muted)', fontSize: 12 }}>carregando página {textNavPage}...</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

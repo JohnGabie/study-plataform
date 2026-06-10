@@ -4,6 +4,7 @@ sqlalchemy
 pydantic
 python-dotenv
 pymupdf
+pymupdf4llm
 python-multipart
 python-jose[cryptography]
 google-auth

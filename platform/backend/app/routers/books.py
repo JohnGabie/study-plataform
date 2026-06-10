@@ -1,9 +1,10 @@
+import json
 import re
 import uuid
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile, File, Form, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, UploadFile, File, Form, status
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -42,9 +43,7 @@ def _bg_extract_text(slug: str, file_path_str: str) -> None:
     from app.db.database import SessionLocal
     db = SessionLocal()
     try:
-        content = _extract_text(Path(file_path_str), slug)
-        text_path = TEXTS_DIR / f"{slug}.md"
-        text_path.write_text(content, encoding="utf-8")
+        text_path = _extract_text(Path(file_path_str), slug)
         book = db.query(Book).filter(Book.slug == slug).first()
         if book:
             book.text_path = str(text_path)
@@ -55,52 +54,87 @@ def _bg_extract_text(slug: str, file_path_str: str) -> None:
         db.close()
 
 
-def _extract_text(pdf_path: Path, slug: str) -> str:
+_OMITTED_RE = re.compile(r"==> picture \[(\d+) x (\d+)\] intentionally omitted <==")
+
+
+def _extract_text(pdf_path: Path, slug: str) -> Path:
+    """Extract PDF to per-page JSON. Returns path to saved file."""
     import fitz
+    import pymupdf4llm
     TEXTS_DIR.mkdir(parents=True, exist_ok=True)
     BOOK_IMGS_DIR.mkdir(parents=True, exist_ok=True)
 
+    # pymupdf4llm produces high-quality text with placeholders where images are
+    chunks = pymupdf4llm.to_markdown(
+        str(pdf_path),
+        page_chunks=True,
+        embed_images=False,
+        show_progress=False,
+    )
+
     doc = fitz.open(str(pdf_path))
-    parts: list[str] = []
     global_img_n = 0
+    pages = []
 
-    for page_num in range(len(doc)):
+    for page_num, chunk in enumerate(chunks):
         page = doc[page_num]
+        pw = page.rect.width
 
-        # Extract images on this page
-        page_imgs: list[tuple[Optional[str], int]] = []
-        for img_info in page.get_images(full=True):
-            xref = img_info[0]
-            global_img_n += 1
+        # Collect images via the documented API: get_images() + get_image_bbox() + extract_image()
+        # block.get("image") from get_text("dict") is unreliable (often None)
+        raw_entries: list[tuple[float, float, int, int, int]] = []  # (y0, x0, xref, w, h)
+        seen_xrefs: set[int] = set()
+
+        for img_tuple in page.get_images(full=True):
+            xref = img_tuple[0]
+            orig_w = img_tuple[2]
+            orig_h = img_tuple[3]
+            if xref in seen_xrefs or orig_w < 30 or orig_h < 30:
+                continue
+            seen_xrefs.add(xref)
             try:
-                data = doc.extract_image(xref)
-                fname = f"{slug}_{global_img_n}.{data['ext']}"
-                (BOOK_IMGS_DIR / fname).write_bytes(data["image"])
-                page_imgs.append((fname, global_img_n))
+                bbox = page.get_image_bbox(xref)
+                raw_entries.append((bbox.y0, bbox.x0, xref, orig_w, orig_h))
             except Exception:
-                page_imgs.append((None, global_img_n))
+                pass
 
-        # Walk text+image blocks in reading order (top→bottom, left→right)
-        blocks = sorted(page.get_text("blocks"), key=lambda b: (b[1], b[0]))
-        img_idx = 0
-        for block in blocks:
-            if block[6] == 0:   # text block
-                t = block[4].strip()
-                if t:
-                    parts.append(t + "\n")
-            elif block[6] == 1:  # image block
-                if img_idx < len(page_imgs):
-                    fname, n = page_imgs[img_idx]
-                    if fname:
-                        parts.append(f"\n![Imagem {n}](/book-imgs/{fname})\n")
-                    else:
-                        parts.append(f"\n*[Imagem {n} — pág. {page_num + 1}]*\n")
-                    img_idx += 1
-                else:
-                    parts.append(f"\n*[Imagem — pág. {page_num + 1}]*\n")
+        # Sort top-to-bottom, left-to-right to match pymupdf4llm placeholder order
+        raw_entries.sort(key=lambda e: (e[0], e[1]))
+
+        page_imgs: list[str] = []
+        for y0, x0, xref, orig_w, orig_h in raw_entries:
+            global_img_n += 1
+            x_center = x0 + (orig_w / 2)  # approximate center from left edge
+
+            if x_center < pw * 0.35:
+                align = "left"
+            elif x_center > pw * 0.65:
+                align = "right"
+            else:
+                align = "center"
+
+            try:
+                extracted = doc.extract_image(xref)
+                img_bytes = extracted["image"]
+                ext = extracted.get("ext", "png")
+                fname = f"{slug}_{global_img_n}.{ext}"
+                (BOOK_IMGS_DIR / fname).write_bytes(img_bytes)
+                page_imgs.append(f"\n![align:{align}](/book-imgs/{fname})\n")
+            except Exception:
+                page_imgs.append(f"\n*[Imagem {orig_w}×{orig_h}px — pág. {page_num + 1}]*\n")
+
+        # Replace pymupdf4llm placeholders with actual images (same reading order)
+        img_iter = iter(page_imgs)
+        def replace_placeholder(m: re.Match) -> str:
+            return next(img_iter, f"\n*[Imagem {m.group(1)}×{m.group(2)}px — pág. {page_num + 1}]*\n")
+
+        text = _OMITTED_RE.sub(replace_placeholder, chunk.get("text", "")).strip()
+        pages.append({"page": page_num + 1, "text": text})
 
     doc.close()
-    return "\n".join(parts)
+    text_path = TEXTS_DIR / f"{slug}.json"
+    text_path.write_text(json.dumps(pages, ensure_ascii=False), encoding="utf-8")
+    return text_path
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
@@ -305,19 +339,18 @@ def extract_text(
     if not pdf_path.exists():
         raise HTTPException(status_code=404, detail="PDF file missing on disk")
 
-    content = _extract_text(pdf_path, slug)
-
-    text_path = TEXTS_DIR / f"{slug}.md"
-    text_path.write_text(content, encoding="utf-8")
+    text_path = _extract_text(pdf_path, slug)
     book.text_path = str(text_path)
     db.commit()
 
-    return {"content": content}
+    pages = json.loads(text_path.read_text(encoding="utf-8"))
+    return {"total_pages": len(pages)}
 
 
 @router.get("/{slug}/text")
 def get_text(
     slug: str,
+    page: int = Query(1, ge=1),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -325,10 +358,13 @@ def get_text(
     if not book or not book.text_path:
         raise HTTPException(status_code=404, detail="Text not extracted yet")
     try:
-        content = Path(book.text_path).read_text(encoding="utf-8")
+        pages = json.loads(Path(book.text_path).read_text(encoding="utf-8"))
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Text file missing on disk")
-    return {"content": content}
+    total = len(pages)
+    if page > total:
+        raise HTTPException(status_code=404, detail="Page out of range")
+    return {"page": page, "total": total, "text": pages[page - 1]["text"]}
 
 
 # ── Book preferences ──────────────────────────────────────────────────────────

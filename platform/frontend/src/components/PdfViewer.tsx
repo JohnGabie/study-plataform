@@ -13,6 +13,7 @@ interface Props {
   onToggleText?: () => void
   textMode?: boolean
   extractingText?: boolean
+  targetPage?: number
 }
 
 const ZOOM_STEPS = [0.5, 0.7, 0.85, 1.0, 1.25, 1.5, 2.0]
@@ -37,7 +38,7 @@ function Divider() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-export default function PdfViewer({ slug, onLoadSuccess, onPageChange, onToggleText, textMode = false, extractingText = false }: Props) {
+export default function PdfViewer({ slug, onLoadSuccess, onPageChange, onToggleText, textMode = false, extractingText = false, targetPage }: Props) {
   const wrapRef  = useRef<HTMLDivElement>(null)
   const pagesRef = useRef<HTMLDivElement>(null)
   const msgRef   = useRef<HTMLDivElement>(null)
@@ -93,6 +94,16 @@ export default function PdfViewer({ slug, onLoadSuccess, onPageChange, onToggleT
   useEffect(() => {
     localStorage.setItem(`pdf_zoom_${slug}`, String(zoom))
   }, [zoom, slug])
+
+  // ── Scroll to page requested externally (text mode sync) ─────────────────
+  useEffect(() => {
+    if (!targetPage || targetPage < 1) return
+    const el = pagesRef.current?.querySelector(`[data-page="${targetPage}"]`)
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      setCurrentPage(targetPage)
+    }
+  }, [targetPage])
 
   // ── Dark mode: CSS-only toggle, no re-render ──────────────────────────────
   useEffect(() => {
