@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import date, timedelta
@@ -12,6 +13,23 @@ from app.models.progress import DailyProgress
 from app.services.progress_service import get_summary
 
 router = APIRouter(prefix="/users", tags=["users"])
+
+
+class UserUpdate(BaseModel):
+    name: str
+
+
+@router.patch("/me")
+def update_me(
+    body: UserUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not body.name.strip():
+        raise HTTPException(status_code=422, detail="name cannot be empty")
+    current_user.name = body.name.strip()
+    db.commit()
+    return {"name": current_user.name}
 
 
 @router.get("/me/stats")
