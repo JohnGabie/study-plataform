@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import api from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 
@@ -59,7 +60,8 @@ function Section({ id, title, children }: { id: string; title: string; children:
 // ── Conta ─────────────────────────────────────────────────────────────────────
 
 function ContaSection() {
-  const { user } = useAuth()
+  const { user, logout } = useAuth()
+  const navigate = useNavigate()
   const [name, setName] = useState(user?.name ?? '')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -150,6 +152,21 @@ function ContaSection() {
             }}
           />
         </div>
+      </div>
+
+      <div style={{ marginTop: 28, paddingTop: 20, borderTop: '1px solid var(--border)' }}>
+        <button
+          onClick={() => { logout(); navigate('/login') }}
+          style={{
+            fontSize: 12, padding: '7px 16px', borderRadius: 6, cursor: 'pointer',
+            background: 'transparent', border: '1px solid var(--border)',
+            color: 'var(--muted)', transition: 'all 130ms',
+          }}
+          onMouseOver={e => { e.currentTarget.style.borderColor = '#ef4444'; e.currentTarget.style.color = '#f87171'; e.currentTarget.style.background = 'rgba(239,68,68,0.06)' }}
+          onMouseOut={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--muted)'; e.currentTarget.style.background = 'transparent' }}
+        >
+          Sair da conta
+        </button>
       </div>
     </Section>
   )
